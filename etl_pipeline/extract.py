@@ -4,7 +4,7 @@ import pandas as pd
 from io import StringIO
 from prefect.tasks import NO_CACHE
 
-@task(retries=3, retry_delay_seconds=10, name="📥 Extract from Mockaroo", cache_policy=NO_CACHE)
+@task(retries=1, retry_delay_seconds=10, name="📥 Extract from Mockaroo", cache_policy=NO_CACHE)
 def extract_from_mockaroo(api_key: str, save_path: str = "raw_sales_data.csv", count: int = 500) -> pd.DataFrame:
     """
     Fetches synthetic CSV data from Mockaroo, saves it locally, and returns it as a DataFrame.
