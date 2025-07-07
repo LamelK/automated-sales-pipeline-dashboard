@@ -6,7 +6,7 @@ from prefect import get_run_logger, task
 from prefect.tasks import NO_CACHE
 
 
-@task(name="Model Data")
+@task(name="Data modeling")
 def model_sales_data(df: pd.DataFrame, raw_df: pd.DataFrame):
     """
     Splits the cleaned dataframe into four dimension/fact tables:
