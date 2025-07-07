@@ -1,34 +1,3 @@
-# name: automated-sales-pipeline-dashboard
-# prefect-version: 3.4.6  #
-
-# build: null
-
-# push: null
-
-# pull:
-#   - prefect.deployments.steps.pull_from_with_block:
-#       block_type_slug: s3-bucket
-#       block_document_name: s3-bucket-block
-#       key: flows/etl_flow.zip
-#       unzip: true
-
-#   - prefect.deployments.steps.pip_install_requirements:
-#       directory: "{{ pull_code.directory }}"
-#       requirements_file: requirements.txt
-
-# deployments:
-# - name: etl-deployment
-#   version: null
-#   tags: []
-#   description: Deploys the main ETL pipeline flow
-#   schedule: {} 
-#   flow_name: main
-#   entrypoint: etl_pipeline/etl_flow.py:main
-#   parameters: {}
-#   work_pool:
-#     name: etl-workpool  
-#     work_queue_name: null  
-#     job_variables: {}
 name: automated-sales-pipeline-dashboard
 prefect-version: 3.4.6
 
@@ -65,3 +34,6 @@ deployments:
     job_variables:
       env: 
         AWS_ROLE_ARN: arn:aws:iam::215848077260:role/service-role/ExtractData-LambdaRole
+  schedule:
+    cron: "0 2 * * 1"  # Every Monday at 2 AM
+    timezone: "Africa/Johannesburg"
