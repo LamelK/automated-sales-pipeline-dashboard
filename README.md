@@ -122,7 +122,7 @@ You will then receive access to the dashboard hosted via **[Metabase](https://in
 
 ---
 ## __Project Documentation__
-For detailed documentation of the project, please refer to [📄project documentation](docs/Project_Documentation)
+For detailed documentation of the project, please refer to [📄project documentation](docs/)
 
 ## __Monitoring__
 Since the front end runs on AWS services, an AWS CloudWatch dashboard is used to monitor the health and performance of key infrastructure components including EC2, RDS, and S3. The dashboard tracks metrics such as available storage in RDS and S3 buckets, EC2 read/write bytes, and CPU utilization, providing real-time visibility into system resource usage, A comprehensive overview of these metrics is available in the documentation, which includes detailed views of EC2, RDS, and S3 performance indicators.
