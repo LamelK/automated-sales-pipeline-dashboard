@@ -2,14 +2,14 @@
 
 ## 📘 Table of Contents
 
-- [📎 Project Overview](#project-overview)  
-- [📎 Tech Stack](#tech-stack)  
-- [📎 Architecture](#architecture)  
-- [📎 How it works](#how-it-works)  
-- [📎 Dashboard](#dashboard)  
-- [📎 Monitoring](#monitoring)  
-- [📎 CI/CD](#cicd)  
-- [📎 Environment setup](#environment-setup)  
+- [Project Overview](#project-overview)  
+- [Tech Stack](#tech-stack)  
+- [Architecture](#architecture)  
+- [How it works](#how-it-works)  
+- [Dashboard](#dashboard)  
+- [Monitoring](#monitoring)  
+- [CI/CD](#cicd)  
+- [Environment setup](#environment-setup)  
   - [Mockaroo](#1mockaroo)  
   - [Virtual environment](#2virtual-environmenet)  
   - [Cloud setup](#3-cloud-setup)  
@@ -28,7 +28,7 @@
     - [Scripts](#52-scripts)  
   - [Deploying](#6-deploying)  
   - [EC2 server application](#7-ec2-server-application)  
-- [📎 License](#license)
+- [License](#license)
 
 
 ## __Project Overview__
