@@ -285,7 +285,7 @@ If there are any errors, check the logs in the UI and address them accordingly.
 ### 6. Deploying
 - Add your changes, commit them, and push to GitHub — this should trigger the CI/CD workflow.
 - The CI/CD will pass when:
-  - All test scripts succeed
+  - All test scripts succeed.
   - All required credentials and configurations are correctly set
 - Once the workflow runs successfully, go to the Prefect UI → **Deployments**, and you should see `etl-deployment` with a status of **Ready**.
   You can now execute this deployment by select options `quick-run`, which will run the entire pipeline. You can monitor the flow execution and logs directly from the UI.
