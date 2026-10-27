@@ -1,7 +1,53 @@
 import pandas as pd
 import numpy as np
+import random
 from prefect import task, get_run_logger
 from prefect.tasks import NO_CACHE
+
+# Names used to replace the source's fixed customer list. 10 x 10 = 100
+# combinations, comfortably more than the ~36 customers renamed per run.
+FIRST_NAMES = [
+    "Thandiwe", "Sipho", "Lerato", "Naledi", "Tshepo",
+    "Zanele", "Kagiso", "Palesa", "Andile", "Refilwe",
+]
+LAST_NAMES = [
+    "Mokoena", "Nkosi", "Dlamini", "Khumalo", "Mahlangu",
+    "Ndlovu", "Zulu", "Sithole", "Mabaso", "Botha",
+]
+
+# How many customers keep the name the source gave them. They are the first
+# few names in sorted order, so the same people stay recognisable across runs
+# and their orders build up a history in the dashboard.
+KEEP_ORIGINAL_NAMES = 4
+
+
+def randomize_customer_names(df, keep=KEEP_ORIGINAL_NAMES):
+    """
+    Replaces the source's fixed customer names with generated ones.
+
+    Every original name maps to exactly one new name, so a customer who placed
+    12 orders still has 12 orders - just under a different name. The first
+    `keep` names (sorted, so stable between runs) are left alone.
+    """
+    originals = sorted(df["customer_name"].dropna().unique())
+    to_rename = originals[keep:]
+
+    combinations = [
+        f"{first} {last}" for first in FIRST_NAMES for last in LAST_NAMES
+    ]
+    combinations = [name for name in combinations if name not in originals]
+    if len(to_rename) > len(combinations):
+        raise ValueError(
+            f"{len(to_rename)} customers to rename but only "
+            f"{len(combinations)} name combinations available"
+        )
+
+    # sample() takes without replacement, so two people never share a name.
+    rename = dict(zip(to_rename, random.sample(combinations, len(to_rename))))
+    df["customer_name"] = df["customer_name"].map(
+        lambda name: rename.get(name, name)
+    )
+    return df
 
 def log_summary(df, label, logger):
     """Logs dataset summary: shape, missing values, duplicates."""
@@ -83,6 +129,9 @@ def transform_sales_data(df_raw):
 
     df = standardize_types(df)
     logger.info("✔️ Standardized data types.")
+
+    df = randomize_customer_names(df)
+    logger.info("✔️ Randomized customer names (4 kept as-is).")
 
     df = drop_invalid_rows(df)
     logger.info("✔️ Dropped invalid rows.")
