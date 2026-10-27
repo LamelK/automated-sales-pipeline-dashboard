@@ -1,131 +1,163 @@
+import datetime
 import pandas as pd
-import numpy as np
-from unittest.mock import patch, MagicMock
 import pytest
+from unittest.mock import patch, MagicMock
 
-from etl_pipeline.transform import *
+from etl_pipeline.transform import (
+    standardize_types,
+    drop_invalid_rows,
+    drop_duplicate_transactions,
+    fill_product_category,
+    fill_price,
+    fill_quantity,
+    compute_total_sale,
+    fill_store_region,
+    transform_sales_data,
+)
+
 
 def sample_data():
     return pd.DataFrame({
-        'transaction_id': [1, 2, 3, None, 5],
-        'day_of_week': ['Monday', np.nan, 'Tuesday', 'Monday', None],
-        'product_name': ['Apple Watch', 'Samsung Phone', np.nan, 'Apple Watch', 'iPad'],
-        'product_category': ['Smartwatch', None, 'Smartphone', 'Smartwatch', None],
-        'price': [799.99, None, 999.99, 799.99, None],
-        'quantity_sold': [2, 1, None, 2, None],
-        'total_sale': [1599.98, None, None, 1599.98, None],
-        'store_location': ['Pretoria', 'Johannesburg', None, 'Pretoria', None],
-        'customer_name': ['Debby', 'Ailsun', None, 'Debby', 'Charlie']
+        "transaction_id": ["T1", "T2", "T3", "T4", "T5", "T1", "T6"],
+        "transaction_date": ["2026-10-24"] * 7,
+        "transaction_time": [
+            "10:00:00", "11:00:00", "12:00:00", "13:00:00",
+            "14:00:00", "10:00:00", "15:00:00",
+        ],
+        "day_of_week": ["Saturday"] * 7,
+        "product_name": [
+            "AirPods Pro 2", "AirPods Pro 2", "AirPods Pro 2", "iPhone 15",
+            "iPhone 15", "AirPods Pro 2", "MacBook Air M3",
+        ],
+        "product_id": [
+            "SKU-1014", "SKU-1014", "SKU-1014", "SKU-1003",
+            "SKU-1003", "SKU-1014", "SKU-1010",
+        ],
+        "product_category": [
+            "Accessories", None, "Accessories", "Smartphone",
+            None, "Accessories", "Laptop",
+        ],
+        "price": [4299.0, 4299.0, None, 18999.0, None, 4299.0, 24999.0],
+        "quantity_sold": [2.0, 1.0, 3.0, None, 4.0, 2.0, 1.0],
+        "total_sale": [8598.0, 4299.0, None, None, None, 8598.0, 24999.0],
+        "currency_code": ["ZAR"] * 7,
+        "payment_method": ["Card", "EFT", "Cash", "Card", "Card", "Card", "Voucher"],
+        "order_status": ["completed"] * 6 + ["refunded"],
+        "store_location": [
+            "Durban", "Durban", "Pretoria", "Pretoria",
+            "Durban", "Durban", "Cape Town",
+        ],
+        "store_id": [
+            "STR-DBN-01", "STR-DBN-01", "STR-PTA-01", "STR-PTA-01",
+            "STR-DBN-01", "STR-DBN-01", "STR-CPT-01",
+        ],
+        "store_region": [
+            "KwaZulu-Natal", None, "Gauteng", "Gauteng",
+            "KwaZulu-Natal", "KwaZulu-Natal", "Western Cape",
+        ],
+        "customer_name": ["Sipho", "Sipho", "Lerato", "Lerato", None, "Sipho", "Anele"],
     })
 
-def test_handle_product_category():
-    df = sample_data()
-    result = handle_product_category(df)
-    # Rows with missing product_category for which no match can be found are dropped
-    assert 'Smartwatch' in result['product_category'].values
-    assert 'Smartphone' in result['product_category'].values
-    # iPad row (missing category, no match) should be dropped
-    assert 'iPad' not in result['product_name'].values
 
-def test_handle_price():
-    df = sample_data()
-    result = handle_price(df)
-    # Prices missing for Samsung Phone and iPad:
-    # Samsung Phone price filled if any match found (none, so dropped),
-    # iPad row should be dropped
-    assert 'Samsung Phone' not in result['product_name'].values
-    assert 'iPad' not in result['product_name'].values
-    # Apple Watch price remains
-    assert all(result[result['product_name'] == 'Apple Watch']['price'] == 799.99)
+def valid_rows():
+    """Rows left after the identifier and duplicate guards."""
+    return drop_duplicate_transactions(drop_invalid_rows(sample_data()))
 
-def test_drop_invalid_rows():
-    df = sample_data()
-    result = drop_invalid_rows(df)
-    # Rows with missing transaction_id, customer_name or product_name dropped
-    assert result['transaction_id'].isnull().sum() == 0
-    assert result['customer_name'].isnull().sum() == 0
-    assert result['product_name'].isnull().sum() == 0
-
-def test_handle_day_of_week():
-    df = sample_data()
-    result = handle_day_of_week(df)
-    # Missing day_of_week filled with mode ("Monday")
-    assert result['day_of_week'].isnull().sum() == 0
-    assert result.loc[result['day_of_week'].isnull(), 'day_of_week'].empty
-
-def test_handle_quantity():
-    df = sample_data()
-    result = handle_quantity(df)
-    # Missing quantity_sold filled with mean (rounded)
-    mean_quantity = round(df['quantity_sold'].mean())
-    assert result['quantity_sold'].isnull().sum() == 0
-    assert result.loc[2, 'quantity_sold'] == mean_quantity  # index 2 had None
-
-def test_compute_total_sale():
-    df = sample_data()
-
-    # First, fill missing price and quantity as in your ETL
-    df_filled_price = handle_price(df)
-    df_filled_quantity = handle_quantity(df_filled_price)
-
-    # Then compute total_sale
-    result = compute_total_sale(df_filled_quantity)
-
-    # Now, total_sale should have no missing values (because price and quantity are filled)
-    assert result['total_sale'].isnull().sum() == 0
-
-    # And total_sale values should be correct
-    for idx in result.index:
-        expected = result.loc[idx, 'price'] * result.loc[idx, 'quantity_sold']
-        actual = result.loc[idx, 'total_sale']
-        assert abs(expected - actual) < 1e-6
-
-
-def test_handle_store_location():
-    df = sample_data()
-    result = handle_store_location(df)
-    # Missing store_location filled with mode ('Pretoria')
-    assert result['store_location'].isnull().sum() == 0
-    assert result.loc[1, 'store_location'] == 'Johannesburg' or result.loc[4, 'store_location'] == 'Pretoria'
 
 def test_standardize_types():
-    df = sample_data()
-    df['transaction_id'] = df['transaction_id'].astype(str) + " "
-    df['price'] = df['price'].astype(str)
-    df['quantity_sold'] = df['quantity_sold'].astype(str)
-    df['total_sale'] = df['total_sale'].astype(str)
-    result = standardize_types(df)
-    # String columns stripped and numeric columns converted
-    assert all(result['transaction_id'].apply(lambda x: isinstance(x, (int, float))))
-    assert all(result['price'].apply(lambda x: isinstance(x, (int, float))))
-    assert all(result['quantity_sold'].apply(lambda x: isinstance(x, (int, float))))
-    assert all(result['total_sale'].apply(lambda x: isinstance(x, (int, float))))
+    df = pd.DataFrame({
+        "transaction_id": [" a1 "],
+        "transaction_date": ["2026-10-24"],
+        "transaction_time": ["13:23:48"],
+        "price": [" 4299 "],
+        "quantity_sold": ["2"],
+        "total_sale": ["8598"],
+    })
 
-@patch("etl_pipeline.transform.get_run_logger")  
+    result = standardize_types(df)
+
+    assert result["transaction_id"].iloc[0] == "a1"
+    assert not pd.api.types.is_numeric_dtype(result["transaction_id"])
+    assert result["transaction_date"].iloc[0] == datetime.date(2026, 10, 24)
+    assert result["transaction_time"].iloc[0] == datetime.time(13, 23, 48)
+    assert result["price"].iloc[0] == 4299.0
+    assert result["quantity_sold"].iloc[0] == 2.0
+    assert result["total_sale"].iloc[0] == 8598.0
+
+
+def test_drop_invalid_rows():
+    result = drop_invalid_rows(sample_data())
+
+    assert len(result) == 6
+    assert result["transaction_id"].notna().all()
+    assert result["product_id"].notna().all()
+    assert result["customer_name"].notna().all()
+
+
+def test_drop_duplicate_transactions():
+    result = valid_rows()
+
+    assert len(result) == 5
+    assert result["transaction_id"].is_unique
+
+
+def test_fill_product_category():
+    result = fill_product_category(valid_rows())
+
+    assert result["product_category"].isnull().sum() == 0
+    assert result.loc[result["product_id"] == "SKU-1014", "product_category"].eq("Accessories").all()
+    assert result.loc[result["product_id"] == "SKU-1003", "product_category"].eq("Smartphone").all()
+
+
+def test_fill_price():
+    result = fill_price(valid_rows())
+
+    assert result["price"].isnull().sum() == 0
+    assert result.loc[result["transaction_id"] == "T3", "price"].iloc[0] == 4299.0
+
+
+def test_fill_quantity():
+    df = valid_rows()
+    expected = round(df["quantity_sold"].mean())
+
+    result = fill_quantity(df)
+
+    assert result["quantity_sold"].isnull().sum() == 0
+    assert result.loc[result["transaction_id"] == "T4", "quantity_sold"].iloc[0] == expected
+
+
+def test_compute_total_sale():
+    df = fill_quantity(fill_price(valid_rows()))
+
+    result = compute_total_sale(df)
+
+    assert result["total_sale"].isnull().sum() == 0
+    for _, row in result.iterrows():
+        assert abs(row["price"] * row["quantity_sold"] - row["total_sale"]) < 0.01
+
+
+def test_fill_store_region():
+    result = fill_store_region(valid_rows())
+
+    assert result["store_region"].isnull().sum() == 0
+    assert result.loc[result["transaction_id"] == "T2", "store_region"].iloc[0] == "KwaZulu-Natal"
+
+
+@patch("etl_pipeline.transform.get_run_logger")
 def test_transform_sales_data(mock_get_logger):
-    mock_logger = MagicMock()
-    mock_get_logger.return_value = mock_logger
+    mock_get_logger.return_value = MagicMock()
 
     df_raw = sample_data()
+    original = df_raw.copy()
+
     cleaned_df, raw_df = transform_sales_data(df_raw)
 
-    # Confirm no missing critical fields
-    assert cleaned_df['transaction_id'].isnull().sum() == 0
-    assert cleaned_df['customer_name'].isnull().sum() == 0
-    assert cleaned_df['product_name'].isnull().sum() == 0
-    assert cleaned_df['product_category'].isnull().sum() == 0
-    assert cleaned_df['price'].isnull().sum() == 0
-    assert cleaned_df['day_of_week'].isnull().sum() == 0
-    assert cleaned_df['quantity_sold'].isnull().sum() == 0
-    assert cleaned_df['total_sale'].isnull().sum() == 0
-    assert cleaned_df['store_location'].isnull().sum() == 0
+    assert cleaned_df.shape[0] == 5
+    assert cleaned_df.isnull().sum().sum() == 0
+    assert cleaned_df["transaction_id"].is_unique
+    assert (cleaned_df["price"] * cleaned_df["quantity_sold"] - cleaned_df["total_sale"]).abs().max() < 0.01
 
-    # Confirm some rows are dropped (because of missing product_name, price fill, etc)
-    assert cleaned_df.shape[0] < df_raw.shape[0]
-
-    # Confirm raw_df remains unchanged
     pd.testing.assert_frame_equal(df_raw, raw_df)
+    pd.testing.assert_frame_equal(df_raw, original)
 
-    # Check that logger.info was called
-    mock_logger.info.assert_called()
-
+    mock_get_logger.assert_called()

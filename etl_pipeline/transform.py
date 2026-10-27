@@ -12,55 +12,29 @@ def log_summary(df, label, logger):
     logger.info(f"Duplicate rows: {df.duplicated().sum()}")
 
 def drop_invalid_rows(df):
-    # Drop rows missing critical identifiers or where product and category are both null
-    return df.dropna(subset=["transaction_id", "customer_name", "product_name"]).loc[
-        ~(df["product_name"].isnull() & df["product_category"].isnull())
-    ]
+    # Drop rows missing the identifiers the target tables need
+    return df.dropna(subset=["transaction_id", "product_id", "customer_name"])
 
-def handle_day_of_week(df):
-    # Fill missing 'day_of_week' with the most frequent value
-    mode_day = df["day_of_week"].mode().iloc[0]
-    df["day_of_week"] = df["day_of_week"].fillna(mode_day)
+def drop_duplicate_transactions(df):
+    # transaction_id is the primary key of the sales table
+    return df.drop_duplicates(subset=["transaction_id"], keep="first")
+
+def fill_product_category(df):
+    # product_category is 1:1 with product_id, so any known row can fill a missing one
+    known = df.dropna(subset=["product_category"]).drop_duplicates("product_id")
+    lookup = known.set_index("product_id")["product_category"]
+    df["product_category"] = df["product_category"].fillna(df["product_id"].map(lookup))
     return df
 
-def handle_product_category(df):
-    # Fill missing product categories based on product_name
-    missing_cat = df["product_category"].isnull()
-    rows_to_drop = []
-
-    for idx in df[missing_cat].index:
-        product = df.at[idx, "product_name"]
-        match = df[(df["product_name"] == product) & df["product_category"].notnull()]
-        
-        if not match.empty:
-            # Fill with most frequent matching category
-            df.at[idx, "product_category"] = match["product_category"].mode().iloc[0]
-        else:
-            # If no match found, drop the row
-            rows_to_drop.append(idx)
-    
-    df = df.drop(index=rows_to_drop).reset_index(drop=True)
+def fill_price(df):
+    # price is 1:1 with product_id
+    known = df.dropna(subset=["price"]).drop_duplicates("product_id")
+    lookup = known.set_index("product_id")["price"]
+    df["price"] = df["price"].fillna(df["product_id"].map(lookup))
     return df
 
-def handle_price(df):
-    # Fill missing prices based on product_name, or drop if no match
-    missing_price = df["price"].isnull()
-    rows_to_drop = []
-
-    for idx in df[missing_price].index:
-        product = df.at[idx, "product_name"]
-        match = df[(df["product_name"] == product) & df["price"].notnull()]
-        
-        if not match.empty:
-            df.at[idx, "price"] = match["price"].mode().iloc[0]
-        else:
-            rows_to_drop.append(idx)
-    
-    df = df.drop(index=rows_to_drop).reset_index(drop=True)
-    return df
-
-def handle_quantity(df):
-    # Fill missing quantity_sold with rounded mean
+def fill_quantity(df):
+    # quantity_sold varies per sale, so fall back to the rounded mean
     mean_quantity = round(df["quantity_sold"].mean())
     df["quantity_sold"] = df["quantity_sold"].fillna(mean_quantity)
     return df
@@ -71,20 +45,22 @@ def compute_total_sale(df):
     df.loc[mask, "total_sale"] = df.loc[mask, "price"] * df.loc[mask, "quantity_sold"]
     return df
 
-def handle_store_location(df):
-    # Fill missing store_location with the mode
-    mode_location = df["store_location"].mode().iloc[0]
-    df["store_location"] = df["store_location"].fillna(mode_location)
+def fill_store_region(df):
+    # store_region is 1:1 with store_id
+    known = df.dropna(subset=["store_region"]).drop_duplicates("store_id")
+    lookup = known.set_index("store_id")["store_region"]
+    df["store_region"] = df["store_region"].fillna(df["store_id"].map(lookup))
     return df
 
 def standardize_types(df):
-    # Strip strings and convert specific columns to numeric
+    # Strip strings and convert specific columns to numeric/date/time
     str_cols = df.select_dtypes(include="object").columns
     df[str_cols] = df[str_cols].apply(lambda x: x.str.strip())
-    df["transaction_id"] = pd.to_numeric(df["transaction_id"], errors='coerce')
     df["price"] = pd.to_numeric(df["price"], errors='coerce')
     df["quantity_sold"] = pd.to_numeric(df["quantity_sold"], errors='coerce')
     df["total_sale"] = pd.to_numeric(df["total_sale"], errors='coerce')
+    df["transaction_date"] = pd.to_datetime(df["transaction_date"], errors='coerce').dt.date
+    df["transaction_time"] = pd.to_datetime(df["transaction_time"], format="%H:%M:%S", errors='coerce').dt.time
     return df
 
 @task(name="🧼 Transform Sales Data", cache_policy=NO_CACHE)
@@ -104,23 +80,23 @@ def transform_sales_data(df_raw):
     df = drop_invalid_rows(df)
     logger.info("✔️ Dropped invalid rows.")
 
-    df = handle_day_of_week(df)
-    logger.info("✔️ Handled missing day_of_week.")
+    df = drop_duplicate_transactions(df)
+    logger.info("✔️ Dropped duplicate transactions.")
 
-    df = handle_product_category(df)
-    logger.info("✔️ Inferred missing product_category.")
+    df = fill_product_category(df)
+    logger.info("✔️ Filled missing product_category.")
 
-    df = handle_price(df)
+    df = fill_price(df)
     logger.info("✔️ Filled missing price.")
 
-    df = handle_quantity(df)
+    df = fill_quantity(df)
     logger.info("✔️ Filled missing quantity_sold.")
 
     df = compute_total_sale(df)
     logger.info("✔️ Computed missing total_sale.")
 
-    df = handle_store_location(df)
-    logger.info("✔️ Filled missing store_location.")
+    df = fill_store_region(df)
+    logger.info("✔️ Filled missing store_region.")
 
     log_summary(df, "After Cleaning", logger)
     logger.info("✅ Transformation completed.")

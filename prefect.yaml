@@ -1,5 +1,5 @@
 name: automated-sales-pipeline-dashboard
-prefect-version: 3.4.6
+prefect-version: 3.9.0
 
 build: null
 
@@ -7,7 +7,7 @@ push:
   - prefect_aws.deployments.steps.push_to_s3:
       id: push_code
       requires: prefect-aws>=0.5
-      bucket: databucket-v1
+      bucket: etl-data-sales-pipeline
       folder: flows
       credentials: "{{ prefect.blocks.aws-credentials.aws-credentials }}"
 
@@ -31,9 +31,6 @@ deployments:
   work_pool:
     name: etl-workpool
     work_queue_name: null
-    job_variables:
-      env: 
-        AWS_ROLE_ARN: arn:aws:iam::215848077260:role/service-role/ExtractData-LambdaRole
   schedule:
     cron: "0 2 * * 1"  # Every Monday at 2 AM
     timezone: "Africa/Johannesburg"

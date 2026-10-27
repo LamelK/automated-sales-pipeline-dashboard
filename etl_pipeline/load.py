@@ -9,28 +9,25 @@ from prefect.tasks import NO_CACHE
 @task(name="Data modeling")
 def model_sales_data(df: pd.DataFrame, raw_df: pd.DataFrame):
     """
-    Splits the cleaned dataframe into four dimension/fact tables:
+    Splits the cleaned dataframe into three dimension tables and one fact table:
     customers, products, stores, and sales.
-    Ensures ID columns are present or generates them.
-    
+
+    product_id and store_id arrive from the source as stable business keys. customer_id
+    is assigned by MySQL and resolved by the loader, so rows in the sales table keep
+    pointing at the same customer as history accumulates.
+
     Returns:
         tuple: (customers_df, products_df, stores_df, sales_df, raw_df)
     """
-    # Generate IDs if not present
-    if 'customer_id' not in df.columns:
-        df['customer_id'] = pd.factorize(df['customer_name'])[0] + 1
-    if 'product_id' not in df.columns:
-        df['product_id'] = pd.factorize(df['product_name'])[0] + 1
-    if 'store_id' not in df.columns:
-        df['store_id'] = pd.factorize(df['store_location'])[0] + 1
+    df = df.copy()
 
     # Create dimension tables
-    customers = df[['customer_id', 'customer_name']].drop_duplicates().reset_index(drop=True)
-    products = df[['product_id', 'product_name', 'product_category']].drop_duplicates().reset_index(drop=True)
-    stores = df[['store_id', 'store_location']].drop_duplicates().reset_index(drop=True)
+    customers = df[["customer_name"]].drop_duplicates().sort_values("customer_name").reset_index(drop=True)
+    products = df[["product_id", "product_name", "product_category"]].drop_duplicates().sort_values("product_id").reset_index(drop=True)
+    stores = df[["store_id", "store_location", "store_region"]].drop_duplicates().sort_values("store_id").reset_index(drop=True)
 
-    # Create fact table
-    sales = df.drop(columns=['customer_name', 'product_name', 'product_category', 'store_location']).copy()
+    # Create fact table; customer_name is resolved to customer_id by the loader
+    sales = df.drop(columns=["product_name", "product_category", "store_location", "store_region"]).copy()
 
     return customers, products, stores, sales, raw_df
 
@@ -41,6 +38,9 @@ def upload_df_to_s3(df: pd.DataFrame, bucket: str, key: str, s3):
     """
 
     logger = get_run_logger()
+
+    if df.empty:
+        raise ValueError(f"Refusing to upload an empty dataset to s3://{bucket}/{key}")
 
     try:
         csv_buffer = io.StringIO()

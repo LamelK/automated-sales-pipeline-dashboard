@@ -3,25 +3,13 @@
 variable "aws_region" {
   description = "The AWS region to deploy into"
   type        = string
-  default     = "us-west-1"
+  default     = "eu-north-1"
 }
 
 variable "vpc_cidr" {
-  description = "CIDR block for the VPC"
+  description = "CIDR block for the VPC. The subnets are carved out of it with cidrsubnet()"
   type        = string
   default     = "10.0.0.0/16"
-}
-
-variable "public_subnet_cidr" {
-  description = "CIDR block for the public subnet"
-  type        = string
-  default     = "10.0.1.0/24"
-}
-
-variable "private_subnet_cidr" {
-  description = "CIDR block for the private subnet"
-  type        = string
-  default     = "10.0.2.0/24"
 }
 
 variable "db_instance_type" {
@@ -33,19 +21,19 @@ variable "db_instance_type" {
 variable "ec2_instance_type" {
   description = "Instance type for Metabase EC2"
   type        = string
-  default     = "t3.micro"
+  default     = "t3.small"
 }
 
 variable "ec2_key_name" {
   description = "Name of the SSH key pair for EC2"
   type        = string
-  default     = "metabase-key"
+  default     = "sales-pipeline-metabase-key"
 }
 
 variable "ssh_public_key_path" {
-  description = "Path to your SSH public key"
+  description = "Path to your SSH public key (~ and absolute paths are expanded)"
   type        = string
-  default     = "~/.ssh/metabase.pub"
+  default     = "metabase.pub"
 }
 
 variable "db_name" {
@@ -60,8 +48,14 @@ variable "db_username" {
   default     = "admin"
 }
 
-variable "bucket_prefix" {
-  description = "Prefix for the S3 bucket name"
+variable "allowed_ip" {
+  description = "Public IP allowed to reach the database from outside the VPC (for local dev/Workbench)"
   type        = string
-  default     = "etl-data"
+  default     = "102.254.103.41"
+}
+
+variable "bucket_prefix" {
+  description = "Name of the S3 bucket that stores the pipeline data. Must be globally unique"
+  type        = string
+  default     = "etl-data-sales-pipeline"
 }

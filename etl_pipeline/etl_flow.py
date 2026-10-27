@@ -1,7 +1,8 @@
 import boto3
 import time
+from botocore.exceptions import ClientError
 from prefect import flow, get_run_logger, task
-from prefect.states import Completed, Failed
+from prefect.states import Completed
 from etl_pipeline.extract import extract_from_mockaroo
 from etl_pipeline.transform import transform_sales_data
 from etl_pipeline.lambda_invoke import invoke_lambda_loader
@@ -15,39 +16,64 @@ from etl_pipeline.load import (
 )
 from prefect.blocks.system import Secret
 
+
+def verify_s3_object(s3, path):
+    """
+    Confirms the object an upload task reported really exists and is not empty.
+
+    Returns:
+        tuple: (path, size in bytes)
+    """
+    if not path or not str(path).startswith("s3://"):
+        raise RuntimeError(f"Upload task returned no S3 path: {path!r}")
+
+    bucket, key = str(path)[len("s3://"):].split("/", 1)
+    try:
+        head = s3.head_object(Bucket=bucket, Key=key)
+    except ClientError as e:
+        raise RuntimeError(f"S3 object {path} is missing: {e}") from e
+
+    size = head["ContentLength"]
+    if size == 0:
+        raise RuntimeError(f"S3 object {path} is empty")
+    return path, size
+
+
 @task(name="Confirm S3 Transfer Complete", retries=1, retry_delay_seconds=10)
 def confirm_s3_landing_complete(
-    customer_upload_future, #Future objects 
-    product_upload_future,
-    store_upload_future,
-    sales_upload_future,
-    raw_upload_future
+    customer_path,
+    product_path,
+    store_path,
+    sales_path,
+    raw_path,
+    s3
 ):
     """
-    This task confirms that all upstream S3 upload tasks have successfully completed.
-    It explicitly receives and implicitly waits for the futures passed as arguments to resolve.
+    Verifies that every dataset the upload tasks reported is actually present in S3.
+    Raises if any object is missing or empty, so a bad upload cannot be reported as success.
     """
     logger = get_run_logger()
 
     logger.info("-----------------------------------------------------")
     logger.info("Confirming all datasets have successfully landed in S3...")
-    # The .result() call here ensures the futures are resolved before proceeding within *this* task.
-    customer_path = customer_upload_future
-    product_path = product_upload_future
-    store_path = store_upload_future
-    sales_path = sales_upload_future
-    raw_path = raw_upload_future
 
-    logger.info("-----------------------------------------------------")
+    paths = {
+        "customers": customer_path,
+        "products": product_path,
+        "stores": store_path,
+        "sales": sales_path,
+        "raw": raw_path,
+    }
+
+    verified = {}
+    for label, path in paths.items():
+        verified[label], size = verify_s3_object(s3, path)
+        logger.info(f"  {label} -> {path} ({size} bytes)")
+
     logger.info("All specified datasets have successfully landed in S3!")
-    logger.info(f"  Customers uploaded to: {customer_path}")
-    logger.info(f"  Products uploaded to: {product_path}")
-    logger.info(f"  Stores uploaded to: {store_path}")
-    logger.info(f"  Sales uploaded to: {sales_path}")
-    logger.info(f"  Raw data uploaded to: {raw_path}")
     logger.info("-----------------------------------------------------")
 
-    return True # Or any other success indicator
+    return verified
 
 @flow(name="ETL Pipeline Flow")
 def main():
@@ -92,10 +118,16 @@ def main():
         df_raw = extract_from_mockaroo(api_key=api_key)
         logger.info(f"Extract phase completed in {round(time.time() - start, 2)}s.")
 
+        if df_raw.empty:
+            raise RuntimeError("Extraction returned no rows; skipping transform.")
+
         # ETL Stage 2: Transform the raw dataframe into structured form
         start = time.time()
         transformed_df, raw_df = transform_sales_data(df_raw)
         logger.info(f"🔧 Transform phase completed in {round(time.time() - start, 2)}s.")
+
+        if transformed_df.empty:
+            raise RuntimeError("Transformation produced no rows; skipping load.")
 
         # ETL Stage 3: Split transformed data into dimension/fact tables
         start = time.time()
@@ -112,19 +144,28 @@ def main():
 
         logger.info(f"📦 S3 upload tasks submitted. Waiting for completion...")
 
-        # Call the confirmation task to ensure all uploads completed
-        confirm_s3_landing_complete.submit(
-            customer_upload_future=customer_task_future,
-            product_upload_future=product_task_future,
-            store_upload_future=store_task_future,
-            sales_upload_future=sales_task_future,
-            raw_upload_future=raw_task_future
-        ).result()
+        # .result() surfaces any upload failure here instead of letting the flow continue
+        upload_paths = {
+            "customers": customer_task_future.result(),
+            "products": product_task_future.result(),
+            "stores": store_task_future.result(),
+            "sales": sales_task_future.result(),
+            "raw": raw_task_future.result(),
+        }
 
-        logger.info(f"✅ S3 load/upload phase completed and confirmed.")
+        verified = confirm_s3_landing_complete(
+            customer_path=upload_paths["customers"],
+            product_path=upload_paths["products"],
+            store_path=upload_paths["stores"],
+            sales_path=upload_paths["sales"],
+            raw_path=upload_paths["raw"],
+            s3=s3_client
+        )
+
+        logger.info(f"✅ S3 load/upload phase completed and confirmed: {sorted(verified)}")
 
         # Invoke the AWS Lambda function to load data into database
-        lambda_function_name = "mapDataFunction"  
+        lambda_function_name = "sales-pipeline-loader"
         logger.info(f"⚡ Invoking Lambda loader function: {lambda_function_name}")
         
         lambda_response = invoke_lambda_loader.submit(lambda_function_name)
@@ -139,7 +180,6 @@ def main():
         return Completed(message=f"🎯 Flow completed successfully in {total_duration} seconds.")
 
     except Exception as e:
-        logger.error(f"ETL pipeline failed: {str(e)}")
-
-        # Return a Failed state with a custom error message
-        return Failed(message=f"❌ Flow failed: {str(e)}")
+        # Re-raise so Prefect marks the run Failed with a real traceback
+        logger.exception(f"ETL pipeline failed: {str(e)}")
+        raise

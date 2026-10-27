@@ -6,6 +6,7 @@
 - [Tech Stack](#tech-stack)  
 - [Architecture](#architecture)  
 - [How it works](#how-it-works)  
+- [Database schema](#database-schema)  
 - [Dashboard](#dashboard)  
 - [Monitoring](#monitoring)  
 - [CI/CD](#cicd)  
@@ -84,7 +85,7 @@ __6.Load Orchestration (Prefect to Lambda):__
 - Once the data is uploaded to S3, Prefect invokes an AWS Lambda Function. This Lambda function is specifically designed to handle the loading of data from S3 into the database.
 
 __7.Data Loading (Lambda to RDS MySQL):__ 
-- The Lambda Function fetches the transformed data from the S3 Bucket, performs final mapping, and loads it into the appropriate tables within the RDS MySQL Database.
+- The Lambda Function fetches the transformed CSV files from the S3 Bucket and upserts them into the appropriate tables within the RDS MySQL Database. No id mapping is needed: the files already carry the SKUs, store codes and transaction UUIDs that the tables use as keys.
 
 __8.Job Completion & Data Availability:__ 
 - Upon successful loading, the Lambda function signals back to Prefect, indicating the completion of the loading phase. At this point, the data is "Data Now Available" in the database.
@@ -94,6 +95,31 @@ __9.Business Intelligence (Metabase):__
 
 __10.User Consumption:__ 
 - End Users interact with Metabase to request reports or view dashboards, allowing them to query the newly available data and gain insights.
+
+---
+
+## __Database schema__
+
+The database is a small star schema: three dimension tables and one fact table, created once by hand in MySQL (see [Initializing RDS](#34-accessing-metabase-and-initializing-rds)).
+
+| Table | Key | Other columns |
+|---|---|---|
+| `products` | `product_id` — the SKU, e.g. `SKU-1014` | `product_name`, `product_category` |
+| `stores` | `store_id`, e.g. `STR-DBN-01` | `store_location`, `store_region` |
+| `customers` | `customer_id` — `AUTO_INCREMENT`, assigned by MySQL | `customer_name` (`UNIQUE`) |
+| `sales` | `transaction_id` — UUID | `transaction_date`, `transaction_time`, `day_of_week`, `product_id`, `customer_id`, `store_id`, `price`, `quantity_sold`, `total_sale`, `currency_code`, `payment_method`, `order_status` |
+
+`sales` holds one row per product line of a transaction, and points at the three dimensions with foreign keys.
+
+**Why the keys look like this**
+
+- `product_id` and `store_id` arrive from the source as stable business keys, so they are used directly — no surrogate ids are invented in Python.
+- `customer_name` is all the source gives us for a customer, so MySQL assigns `customer_id` with `AUTO_INCREMENT`. The loader inserts names with `INSERT IGNORE` and then reads the ids back, which keeps every existing row pointing at the same person.
+- `transaction_id` is a UUID, unique per transaction, which makes the table safe to append to across runs.
+
+**Loading is incremental**
+
+The loader never deletes. Every table is written with `INSERT ... ON DUPLICATE KEY UPDATE`, so re-running a flow is idempotent, retries are safe, and earlier days stay in `sales` — which is what the daily filter in Metabase needs.
 
 ---
 
@@ -179,15 +205,14 @@ pip install -r requirements.txt
     ssh-keygen -t rsa -b 4096 -f ./metabase
     ```
 - After generating the keys, you can open `variables.tf` or `main.tf` to customize values such as the S3 bucket name, RDS database name, username, region, etc., according to your preferences.
-- You may also want to change the EC2 instance type in both `main.tf` and `variables.tf`. While `t3.micro` is a free tier option that generally works, it has limited RAM (1 GiB), which might cause performance issues when running Metabase and other services. To avoid slowdowns or crashes, you might need to configure swap memory as additional virtual RAM. 
-For smoother and more reliable performance, it’s recommended to use a larger instance type like `t3.small` (which has 2 GiB RAM) or higher, depending on your workload and budget.
+- The EC2 instance type is set by `ec2_instance_type` in `variables.tf`, and defaults to `t3.small` (2 vCPU, 2 GiB RAM). Earlier versions used `t3.micro`, whose 1 GiB of RAM caused Metabase to slow down or crash under load. The `user_data` script still adds a 2 GiB swap file as a safety margin.
 
-        -   ⚠️ **Note:** Any instance besides `t2.micro` and `t3.micro` are not included in the AWS Free Tier, so charges may apply.
+        -   ⚠️ **Note:** Any instance besides `t2.micro` and `t3.micro` are not included in the AWS Free Tier, so `t3.small` incurs charges.
 
 #### 3.3. Spin up AWS Services
 -  Ensure that you have your AWS credentials configured in your system.
 -  in the same folder as the terraform files,type `terraform plan` in the terminal. This will show your spin-up plan and any other errors that might have been improperly configured.
-- Please note thatThe zip files inside the Terraform directory are used by Terraform to deploy and upload code to their respective AWS Lambda functions.
+- `terraform/lambda_deployment_package1.zip` is the deployment package Terraform uploads for the `sales-pipeline-loader` Lambda. It must contain `lambda/lambda_function.py` plus its `pymysql` dependency — rebuild the zip whenever the loader changes, otherwise `terraform apply` deploys the old code.
 -  After reviewing the plan, type `terraform apply`. This process will take a while as it spins up AWS services.
 -  If not successful, see which services failed and fix them.
 -  If successful, it will show you the output with some of your credentials. Store them safely. The DB password will not be displayed. To get it, input:
@@ -207,7 +232,7 @@ For smoother and more reliable performance, it’s recommended to use a larger i
       ```
       Once connected, install Java 21 first, then Metabase, and finally start the Metabase service manually.
 ##### Initializing RDS
-  - Then, head to the Lambda service in the AWS Console and select the `rds-initializer` function. Go to the "Test" tab and test the function.     This will initialize the schema in your RDS database.It is crucial to initialize the schema before running the whole workflow
+  - Create the schema once, by hand, with a MySQL client (for example MySQL Workbench) pointed at the RDS instance. The four tables, their keys and their foreign keys must exist before the first flow run — see [Database schema](#database-schema).
   - Metabase will also prompt you to enter the **database name**, **username**, **password**, and **host**.  
   Use the values you received from the Terraform output, this step links Metabase to the RDS instance.
 
@@ -268,15 +293,12 @@ For smoother and more reliable performance, it’s recommended to use a larger i
 
 
 #### 5.2 Scripts
-- In the `etl_flow.py` script, locate the `lambda_function_name` variable and replace its value with your Lambda function name:  
+- The Lambda function is named `sales-pipeline-loader` in both `etl_flow.py` and `terraform/main.tf`, so no edit is needed. If you rename it in AWS, update the `lambda_function_name` variable in `etl_flow.py` and the matching assertion in `test_etl_flow.py`:
   ```python
-  lambda_function_name = "s3-to-rds-loader"
-- In the `test_etl_flow.py` file, go to line 96 and replace the argument in the mock assertion with your Lambda function name:
-  ```python
-  mock_lambda_submit.assert_called_once_with("s3-to-rds-loader")
+  lambda_function_name = "sales-pipeline-loader"
   ```
-- In the lambda_invoke.py script, ensure that the AWS region matches the region used in your Terraform configuration.
-  This ensures the Lambda invocation works correctly within your chosen AWS region.
+- The region used to invoke the Lambda comes from the Prefect secret block, not from the code. Add an `AWS_REGION` key to the `credentials` block, or leave it out to default to `us-west-1` (the default in `terraform/variables.tf`).
+  Keeping it aligned with `var.aws_region` is what makes the invocation resolve the function.
 
 To test the flow locally, run the `run_pipeline.py` script.  
 Then, go to the Prefect UI to observe the flow execution.  
