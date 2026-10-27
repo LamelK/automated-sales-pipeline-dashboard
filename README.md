@@ -138,6 +138,10 @@ The database is a small star schema: three dimension tables and one fact table, 
 
 `sales` holds one row per product line of a transaction, and points at the three dimensions with foreign keys.
 
+**How the sale date is set**
+
+Mockaroo returns the same hard-coded `transaction_date` on every call, so the pipeline overwrites `transaction_date` and `day_of_week` with the **business day the run reports on**: the South African date minus one day. A run at 02:00 on the 28th stores rows dated the 27th — the day that has actually finished. Without this every run would stack onto one fixed date and no revenue trend could form.
+
 **Why the keys look like this**
 
 - `product_id` and `store_id` arrive from the source as stable business keys, so they are used directly — no surrogate ids are invented in Python.
