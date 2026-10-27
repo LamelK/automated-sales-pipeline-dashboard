@@ -61,8 +61,8 @@ def handler(event, context):
     """
     Creates the tables.
 
-    Send {"action": "reset"} to empty the sales table first — useful when the
-    dataset should start from a clean, single run.
+    Send {"action": "reset"} to empty every table — useful when the dataset
+    should start from a clean, single run.
     """
     action = (event or {}).get("action", "create")
 
@@ -79,10 +79,12 @@ def handler(event, context):
     try:
         with conn.cursor() as cur:
             if action == "reset":
-                cur.execute("DELETE FROM sales")
+                # sales first: it holds the foreign keys into the dimensions.
+                for table in ("sales", "customers", "products", "stores"):
+                    cur.execute(f"DELETE FROM {table}")
                 conn.commit()
-                print("Sales table cleared.")
-                return {"status": "success", "message": "sales table cleared"}
+                print("All tables cleared.")
+                return {"status": "success", "message": "all tables cleared"}
 
             for statement in DDL:
                 cur.execute(statement)
