@@ -64,13 +64,13 @@ def standardize_types(df):
     return df
 
 @task(name="🧼 Transform Sales Data", cache_policy=NO_CACHE)
-def transform_sales_data(df_raw, run_date=None):
+def transform_sales_data(df_raw):
     """
     Cleans the raw data and returns (transformed_df, raw_df).
 
-    run_date: when given, every sale is dated with it. The source data always
-    carries the same fixed date, so without this each run would pile onto one
-    day and the revenue trend could never move.
+    The sale date and weekday are taken from the source as-is: the Mockaroo
+    schema already returns the trading day (yesterday's date), so rewriting
+    them here would only duplicate that logic.
     """
     logger = get_run_logger()
     logger.info("🔧 Starting transformation...")
@@ -83,13 +83,6 @@ def transform_sales_data(df_raw, run_date=None):
 
     df = standardize_types(df)
     logger.info("✔️ Standardized data types.")
-
-    # Stamp the sales with the day this pipeline actually ran, so weekly runs
-    # build a real trend instead of overloading the source's fixed date.
-    if run_date is not None:
-        df["transaction_date"] = run_date
-        df["day_of_week"] = run_date.strftime("%A")
-        logger.info(f"📅 Sales dated {run_date} ({run_date.strftime('%A')}).")
 
     df = drop_invalid_rows(df)
     logger.info("✔️ Dropped invalid rows.")

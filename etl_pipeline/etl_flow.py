@@ -1,6 +1,6 @@
 import boto3
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 from prefect import flow, get_run_logger, task
 from prefect.states import Completed
@@ -16,13 +16,6 @@ from etl_pipeline.load import (
     upload_raw_df_to_s3
 )
 from prefect.blocks.system import Secret
-
-try:
-    from zoneinfo import ZoneInfo
-    SAST = ZoneInfo("Africa/Johannesburg")
-except Exception:  # Windows machines without the tzdata package
-    # South Africa has no daylight saving, so the fixed offset is always right.
-    SAST = timezone(timedelta(hours=2))
 
 
 def verify_s3_object(s3, path):
@@ -119,14 +112,6 @@ def main():
         run_stamp = run_started.strftime("%Y%m%dT%H%M%SZ")
         logger.info(f"🗂️ Run folder: {run_stamp}")
 
-        # Sales are dated with the business day they belong to, which is the day
-        # that has just finished - not the day this run happens to fire on. A
-        # 02:00 run has not seen any of today's trading yet, so it reports
-        # yesterday. Local time matters: at 00:30 in Johannesburg the UTC date is
-        # still yesterday, so the two clocks would otherwise disagree.
-        run_date = (run_started.astimezone(SAST) - timedelta(days=1)).date()
-        logger.info(f"🗓️ Sales will be dated {run_date} (the business day just closed).")
-
         # Initialize the boto3 S3 client for use in the load tasks
         s3_client = boto3.client(
             's3',
@@ -145,7 +130,7 @@ def main():
 
         # ETL Stage 2: Transform the raw dataframe into structured form
         start = time.time()
-        transformed_df, raw_df = transform_sales_data(df_raw, run_date=run_date)
+        transformed_df, raw_df = transform_sales_data(df_raw)
         logger.info(f"🔧 Transform phase completed in {round(time.time() - start, 2)}s.")
 
         if transformed_df.empty:
