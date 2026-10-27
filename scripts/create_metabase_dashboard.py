@@ -29,6 +29,43 @@ EXCLUDE_CANCELLED = "s.order_status <> 'cancelled'"
 # field filter expands without an ambiguous column.
 STORE_FILTERED = True
 
+# Earthy palette: clay, olive, ochre, sand, bark, sage.
+PALETTE = {
+    "terracotta": "#B85C38",
+    "olive": "#6B705C",
+    "ochre": "#C9A227",
+    "clay": "#A9714B",
+    "sage": "#A3B18A",
+    "bark": "#6B4F3A",
+    "sand": "#D4A373",
+}
+
+# Which colour each chart's metric uses.
+SERIES_COLORS = {
+    "Total revenue": {"revenue": PALETTE["terracotta"]},
+    "Items sold": {"items": PALETTE["olive"]},
+    "Average order value": {"avg_order": PALETTE["clay"]},
+    "Cancelled rate %": {"cancelled_pct": PALETTE["terracotta"]},
+    "Revenue trend with 7-day average": {"revenue": PALETTE["terracotta"], "revenue_7day_avg": PALETTE["olive"]},
+    "Payment method mix": {"revenue": PALETTE["terracotta"]},
+    "Top 10 products by revenue": {"revenue": PALETTE["ochre"]},
+    "Most sold products by units": {"units_sold": PALETTE["olive"]},
+    "Revenue share by store": {"revenue": PALETTE["clay"]},
+    "Revenue by day of week": {"revenue": PALETTE["sand"]},
+    "Sales by hour of day": {"revenue": PALETTE["bark"]},
+    "Top customers by revenue": {"revenue": PALETTE["sage"]},
+    "Order status breakdown": {"orders": PALETTE["ochre"]},
+    "Cumulative revenue through the day": {"cumulative_revenue": PALETTE["clay"]},
+}
+
+# Pie slices are coloured per payment method.
+PIE_COLORS = {
+    "Card": PALETTE["terracotta"],
+    "EFT": PALETTE["olive"],
+    "Cash": PALETTE["ochre"],
+    "Voucher": PALETTE["bark"],
+}
+
 
 def session():
     """Log in and return a requests session carrying the Metabase session token."""
@@ -101,6 +138,17 @@ def build_sql(spec):
 def upsert_card(s, db_id, coll_id, existing, spec):
     """Create the card, or update it in place if a card with the same name exists."""
     sql, tags = build_sql(spec)
+    settings = dict(spec.get("settings", {}))
+
+    # Apply the earthy palette to this chart's metrics.
+    series = dict(settings.get("series_settings", {}))
+    for metric, colour in SERIES_COLORS.get(spec["name"], {}).items():
+        series.setdefault(metric, {})["color"] = colour
+    if series:
+        settings["series_settings"] = series
+    if spec["display"] == "pie":
+        settings["pie.colors"] = PIE_COLORS
+
     payload = {
         "name": spec["name"],
         "description": spec.get("description", ""),
@@ -110,7 +158,7 @@ def upsert_card(s, db_id, coll_id, existing, spec):
             "database": db_id,
             "native": {"query": sql, "template-tags": tags},
         },
-        "visualization_settings": spec.get("settings", {}),
+        "visualization_settings": settings,
         "collection_id": coll_id,
     }
     if spec["name"] in existing:
