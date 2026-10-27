@@ -146,7 +146,6 @@ The Mockaroo schema returns the trading day itself — yesterday's date — so `
 
 - `product_id` and `store_id` arrive from the source as stable business keys, so they are used directly — no surrogate ids are invented in Python.
 - `customer_name` is all the source gives us for a customer, so MySQL assigns `customer_id` with `AUTO_INCREMENT`. The loader inserts names with `INSERT IGNORE` and then reads the ids back, which keeps every existing row pointing at the same person.
-- The 36 highest-sorted customer names are replaced on every run with generated names from a 100-name pool, so the dataset does not show the same customer list forever. Each original name maps to exactly one new one, so a customer's order history stays together. The first 4 names in sorted order are left untouched, which keeps a handful of recognisable customers across runs.
 - `transaction_id` is a UUID, unique per transaction, which makes the table safe to append to across runs.
 
 **Loading is incremental**

@@ -13,7 +13,6 @@ from etl_pipeline.transform import (
     compute_total_sale,
     fill_store_region,
     transform_sales_data,
-    randomize_customer_names,
 )
 
 
@@ -142,25 +141,6 @@ def test_fill_store_region():
 
     assert result["store_region"].isnull().sum() == 0
     assert result.loc[result["transaction_id"] == "T2", "store_region"].iloc[0] == "KwaZulu-Natal"
-
-
-def test_randomize_customer_names():
-    names = [f"Customer {i:02d}" for i in range(40)]
-    df = pd.DataFrame({
-        "transaction_id": [f"t{i}" for i in range(40)],
-        "customer_name": names,
-    })
-
-    result = randomize_customer_names(df, keep=4)
-
-    originals = sorted(set(names))
-    kept = [n for n in result["customer_name"] if n in originals]
-    renamed = [n for n in result["customer_name"] if n not in originals]
-
-    assert kept == originals[:4]            # the same four people every run
-    assert len(renamed) == 36               # everything else is new
-    assert result["customer_name"].is_unique
-    assert result["transaction_id"].tolist() == df["transaction_id"].tolist()
 
 
 @patch("etl_pipeline.transform.get_run_logger")
