@@ -176,7 +176,7 @@ CARDS = [
         "sql": """
             SELECT ROUND(SUM(sales.total_sale), 2) AS revenue
             FROM sales
-            JOIN products p ON p.product_id = sales.product_id
+            JOIN products ON products.product_id = sales.product_id
             WHERE sales.order_status <> 'cancelled' __FILTERS__
         """,
         "settings": {"scalar.field": "revenue"},
@@ -189,7 +189,7 @@ CARDS = [
         "sql": """
             SELECT SUM(sales.quantity_sold) AS items
             FROM sales
-            JOIN products p ON p.product_id = sales.product_id
+            JOIN products ON products.product_id = sales.product_id
             WHERE sales.order_status <> 'cancelled' __FILTERS__
         """,
         "settings": {"scalar.field": "items"},
@@ -202,7 +202,7 @@ CARDS = [
         "sql": """
             SELECT ROUND(AVG(sales.total_sale), 2) AS avg_order
             FROM sales
-            JOIN products p ON p.product_id = sales.product_id
+            JOIN products ON products.product_id = sales.product_id
             WHERE sales.order_status <> 'cancelled' __FILTERS__
         """,
         "settings": {"scalar.field": "avg_order"},
@@ -227,7 +227,7 @@ CARDS = [
             WITH daily AS (
                 SELECT sales.transaction_date AS d, SUM(sales.total_sale) AS revenue
                 FROM sales
-                JOIN products p ON p.product_id = sales.product_id
+                JOIN products ON products.product_id = sales.product_id
                 WHERE sales.order_status <> 'cancelled' __FILTERS__
                 GROUP BY sales.transaction_date
             )
@@ -251,7 +251,7 @@ CARDS = [
         "sql": """
             SELECT sales.payment_method, ROUND(SUM(sales.total_sale), 2) AS revenue
             FROM sales
-            JOIN products p ON p.product_id = sales.product_id
+            JOIN products ON products.product_id = sales.product_id
             WHERE sales.order_status <> 'cancelled' __FILTERS__
             GROUP BY sales.payment_method
             ORDER BY revenue DESC
@@ -264,11 +264,11 @@ CARDS = [
         "name": "Top 10 products by revenue",
         "display": "row",
         "sql": """
-            SELECT p.product_name, ROUND(SUM(sales.total_sale), 2) AS revenue, SUM(sales.quantity_sold) AS units
+            SELECT products.product_name, ROUND(SUM(sales.total_sale), 2) AS revenue, SUM(sales.quantity_sold) AS units
             FROM sales
-            JOIN products p ON p.product_id = sales.product_id
+            JOIN products ON products.product_id = sales.product_id
             WHERE sales.order_status <> 'cancelled' __FILTERS__
-            GROUP BY p.product_name
+            GROUP BY products.product_name
             ORDER BY revenue DESC
             LIMIT 10
         """,
@@ -280,11 +280,11 @@ CARDS = [
         "name": "Most sold products by units",
         "display": "row",
         "sql": """
-            SELECT p.product_name, SUM(sales.quantity_sold) AS units_sold
+            SELECT products.product_name, SUM(sales.quantity_sold) AS units_sold
             FROM sales
-            JOIN products p ON p.product_id = sales.product_id
+            JOIN products ON products.product_id = sales.product_id
             WHERE sales.order_status <> 'cancelled' __FILTERS__
-            GROUP BY p.product_name
+            GROUP BY products.product_name
             ORDER BY units_sold DESC
             LIMIT 10
         """,
@@ -303,7 +303,7 @@ CARDS = [
                    ), 1) AS pct_of_total
             FROM sales
             JOIN stores st ON st.store_id = sales.store_id
-            JOIN products p ON p.product_id = sales.product_id
+            JOIN products ON products.product_id = sales.product_id
             WHERE sales.order_status <> 'cancelled' __FILTERS__
             GROUP BY st.store_location, st.store_region
             ORDER BY revenue DESC
@@ -318,7 +318,7 @@ CARDS = [
         "sql": """
             SELECT sales.day_of_week, ROUND(SUM(sales.total_sale), 2) AS revenue, COUNT(*) AS orders
             FROM sales
-            JOIN products p ON p.product_id = sales.product_id
+            JOIN products ON products.product_id = sales.product_id
             WHERE sales.order_status <> 'cancelled' __FILTERS__
             GROUP BY sales.day_of_week
             ORDER BY FIELD(sales.day_of_week,'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
@@ -335,7 +335,7 @@ CARDS = [
                    ROUND(SUM(sales.total_sale), 2) AS revenue,
                    COUNT(*) AS orders
             FROM sales
-            JOIN products p ON p.product_id = sales.product_id
+            JOIN products ON products.product_id = sales.product_id
             WHERE sales.order_status <> 'cancelled' __FILTERS__
             GROUP BY HOUR(sales.transaction_time)
             ORDER BY hour_of_day
@@ -351,7 +351,7 @@ CARDS = [
             SELECT c.customer_name, ROUND(SUM(sales.total_sale), 2) AS revenue, COUNT(*) AS orders
             FROM sales
             JOIN customers c ON c.customer_id = sales.customer_id
-            JOIN products p ON p.product_id = sales.product_id
+            JOIN products ON products.product_id = sales.product_id
             WHERE sales.order_status <> 'cancelled' __FILTERS__
             GROUP BY c.customer_name
             ORDER BY revenue DESC
@@ -383,7 +383,7 @@ CARDS = [
             FROM (
                 SELECT HOUR(sales.transaction_time) AS hour_of_day, SUM(sales.total_sale) AS revenue
                 FROM sales
-                JOIN products p ON p.product_id = sales.product_id
+                JOIN products ON products.product_id = sales.product_id
                 WHERE sales.order_status <> 'cancelled' __FILTERS__
                 GROUP BY HOUR(sales.transaction_time)
             ) hourly

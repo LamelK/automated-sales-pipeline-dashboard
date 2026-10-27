@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sales Overview</title>
+  <style>
+    /* Earthy teal backdrop for the embedded Metabase dashboard.
+       Metabase's open-source build has no dashboard theme setting, so the
+       colour comes from this page instead. */
+    :root {
+      --deep-teal: #0f3b38;
+      --teal: #14524f;
+      --sea: #2a7168;
+      --sand: #c7b299;
+      --stone: #7a8b8b;
+      --ink: #10201f;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1100px 600px at 12% -10%, rgba(199, 178, 153, 0.22), transparent 60%),
+        radial-gradient(900px 500px at 100% 0%, rgba(42, 113, 104, 0.35), transparent 55%),
+        linear-gradient(160deg, var(--deep-teal) 0%, var(--teal) 45%, var(--sea) 100%);
+      background-attachment: fixed;
+    }
+
+    /* Faint diagonal texture so the gradient does not look flat. */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image: repeating-linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.035) 0 2px,
+        transparent 2px 9px
+      );
+    }
+
+    .wrap {
+      position: relative;
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 36px 24px 56px;
+    }
+
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 22px;
+      color: #f3efe7;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.5rem, 2.4vw, 2.1rem);
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .subtitle {
+      margin: 0;
+      font-size: 0.95rem;
+      color: rgba(243, 239, 231, 0.75);
+    }
+
+    .badge {
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--deep-teal);
+      background: var(--sand);
+    }
+
+    .frame {
+      border-radius: 18px;
+      overflow: hidden;
+      background: #ffffff;
+      box-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.5) inset,
+        0 24px 60px rgba(6, 32, 30, 0.45);
+    }
+
+    iframe {
+      display: block;
+      width: 100%;
+      height: 1750px;
+      border: 0;
+    }
+
+    footer {
+      margin-top: 18px;
+      font-size: 0.82rem;
+      color: rgba(243, 239, 231, 0.65);
+      text-align: center;
+    }
+
+    footer a { color: var(--sand); }
+
+    @media (max-width: 700px) {
+      iframe { height: 2600px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Sales Overview</h1>
+        <p class="subtitle">Mockaroo → Prefect → S3 → Lambda → MySQL → Metabase</p>
+      </div>
+      <span class="badge">Live data</span>
+    </header>
+
+    <div class="frame">
+      <!-- Public Metabase dashboard: no login needed for viewers. -->
+      <iframe
+        id="dashboard"
+        src="https://lamelsmetabase.fyi/public/dashboard/152e1b9d-bd95-4467-94f2-ab7b3fb4582f"
+        title="Sales Overview dashboard"
+        allowtransparency="true"
+        loading="lazy"></iframe>
+    </div>
+
+    <footer>
+      Powered by Metabase ·
+      <a href="https://lamelsmetabase.fyi/public/dashboard/152e1b9d-bd95-4467-94f2-ab7b3fb4582f" target="_blank" rel="noopener">open full screen</a>
+    </footer>
+  </div>
+
+  <script>
+    // Reload the embedded dashboard every five minutes so a scheduled pipeline
+    // run shows up without anyone refreshing by hand.
+    setInterval(function () {
+      var frame = document.getElementById("dashboard");
+      if (frame) frame.src = frame.src.split("?")[0] + "?_=" + Date.now();
+    }, 300000);
+  </script>
+</body>
+</html>
