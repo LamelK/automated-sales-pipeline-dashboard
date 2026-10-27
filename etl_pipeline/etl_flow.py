@@ -1,5 +1,6 @@
 import boto3
 import time
+from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 from prefect import flow, get_run_logger, task
 from prefect.states import Completed
@@ -105,6 +106,11 @@ def main():
 
         logger.info("✅ All secrets loaded successfully.")
 
+        # One stamp per run. Every file this run writes goes in its own S3
+        # folder, so runs never overwrite each other.
+        run_stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        logger.info(f"🗂️ Run folder: {run_stamp}")
+
         # Initialize the boto3 S3 client for use in the load tasks
         s3_client = boto3.client(
             's3',
@@ -136,11 +142,11 @@ def main():
 
         # ETL Stage 4: Upload each dataset to S3 asynchronously
         start = time.time()
-        customer_task_future = upload_customers_to_s3.submit(customers_df, bucket_name, s3=s3_client)
-        product_task_future = upload_products_to_s3.submit(products_df, bucket_name, s3=s3_client)
-        store_task_future = upload_stores_to_s3.submit(stores_df, bucket_name, s3=s3_client)
-        sales_task_future = upload_sales_to_s3.submit(sales_df, bucket_name, s3=s3_client)
-        raw_task_future = upload_raw_df_to_s3.submit(raw_df, bucket_name, s3=s3_client)
+        customer_task_future = upload_customers_to_s3.submit(customers_df, bucket_name, run_stamp, s3=s3_client)
+        product_task_future = upload_products_to_s3.submit(products_df, bucket_name, run_stamp, s3=s3_client)
+        store_task_future = upload_stores_to_s3.submit(stores_df, bucket_name, run_stamp, s3=s3_client)
+        sales_task_future = upload_sales_to_s3.submit(sales_df, bucket_name, run_stamp, s3=s3_client)
+        raw_task_future = upload_raw_df_to_s3.submit(raw_df, bucket_name, run_stamp, s3=s3_client)
 
         logger.info(f"📦 S3 upload tasks submitted. Waiting for completion...")
 
@@ -164,11 +170,18 @@ def main():
 
         logger.info(f"✅ S3 load/upload phase completed and confirmed: {sorted(verified)}")
 
+        # Turn the verified s3:// paths into keys, and tell the Lambda exactly
+        # which files to load. Without this it would fall back to the old
+        # fixed file names, which no longer exist.
+        key_prefix = f"s3://{bucket_name}/"
+        s3_keys = {name: path.replace(key_prefix, "", 1) for name, path in upload_paths.items()}
+
         # Invoke the AWS Lambda function to load data into database
         lambda_function_name = "sales-pipeline-loader"
         logger.info(f"⚡ Invoking Lambda loader function: {lambda_function_name}")
-        
-        lambda_response = invoke_lambda_loader.submit(lambda_function_name)
+        logger.info(f"📄 Files to load: {s3_keys}")
+
+        lambda_response = invoke_lambda_loader.submit(lambda_function_name, payload={"keys": s3_keys})
         response_result = lambda_response.result()
         logger.info(f"✅ Lambda loader response: {response_result}")
 

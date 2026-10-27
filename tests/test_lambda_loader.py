@@ -115,7 +115,7 @@ def staged_csvs(customers=("Sipho Ndlovu", "Lerato Mokoena"), sale_customers=("S
     }
 
 
-def run_loader(loader, monkeypatch, bodies, cursor):
+def run_loader(loader, monkeypatch, bodies, cursor, event=None):
     connection = FakeConnection(cursor)
 
     fake_boto3 = MagicMock()
@@ -126,7 +126,7 @@ def run_loader(loader, monkeypatch, bodies, cursor):
     fake_pymysql.connect.return_value = connection
     monkeypatch.setattr(loader, "pymysql", fake_pymysql)
 
-    return loader.lambda_handler({}, None), connection
+    return loader.lambda_handler(event or {}, None), connection
 
 
 def test_upserts_every_table_and_never_deletes(loader, monkeypatch):
@@ -204,6 +204,23 @@ def test_connection_failure_is_raised_not_masked(loader, monkeypatch):
 
     with pytest.raises(RuntimeError, match="cannot reach RDS"):
         loader.lambda_handler({}, None)
+
+
+def test_loads_the_files_named_in_the_event(loader, monkeypatch):
+    """The Prefect flow passes timestamped keys; the loader must read those, not the old fixed names."""
+    cursor = FakeCursor()
+    stamp = "20261027T160522Z"
+    bodies = {
+        f"transformed_data/{stamp}/{key.split('/')[-1]}": body
+        for key, body in staged_csvs().items()
+    }
+    event = {"keys": {name: f"transformed_data/{stamp}/{name}.csv"
+                      for name in ("products", "stores", "customers", "sales")}}
+
+    result, _ = run_loader(loader, monkeypatch, bodies, cursor, event=event)
+
+    assert result["status"] == "success"
+    assert "sales=2" in result["message"]
 
 
 def test_unknown_customer_is_rejected(loader, monkeypatch):

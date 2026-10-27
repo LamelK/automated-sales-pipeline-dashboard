@@ -8,6 +8,15 @@ from io import StringIO
 # MySQL 8.4 dropped mysql_native_password, so caching_sha2_password needs a TLS channel
 CA_BUNDLE = os.path.join(os.path.dirname(__file__), "global-bundle.pem")
 
+# Keys used when the caller does not say which files to load (e.g. a manual invoke).
+# The Prefect flow always passes the exact files it uploaded for that run.
+DEFAULT_KEYS = {
+    "products": "transformed_data/products.csv",
+    "stores": "transformed_data/stores.csv",
+    "customers": "transformed_data/customers.csv",
+    "sales": "transformed_data/sales.csv",
+}
+
 
 def get_csv_from_s3(s3, bucket_name, file_key):
     print(f"📥 Reading: {file_key}")
@@ -99,6 +108,11 @@ def insert_sales(cursor, rows, customer_ids):
 
 def lambda_handler(event, context):
     bucket_name = os.environ["BUCKET_NAME"]
+
+    # event looks like {"keys": {"sales": "transformed_data/<stamp>/sales.csv", ...}}
+    keys = {**DEFAULT_KEYS, **(event or {}).get("keys", {})}
+    print(f"📄 Loading files: {keys}")
+
     conn = None
 
     try:
@@ -116,10 +130,10 @@ def lambda_handler(event, context):
         cursor = conn.cursor()
 
         s3 = boto3.client("s3")
-        products = get_csv_from_s3(s3, bucket_name, "transformed_data/products.csv")
-        stores = get_csv_from_s3(s3, bucket_name, "transformed_data/stores.csv")
-        customers = get_csv_from_s3(s3, bucket_name, "transformed_data/customers.csv")
-        sales = get_csv_from_s3(s3, bucket_name, "transformed_data/sales.csv")
+        products = get_csv_from_s3(s3, bucket_name, keys["products"])
+        stores = get_csv_from_s3(s3, bucket_name, keys["stores"])
+        customers = get_csv_from_s3(s3, bucket_name, keys["customers"])
+        sales = get_csv_from_s3(s3, bucket_name, keys["sales"])
 
         start = time.time()
         upsert_products(cursor, products)

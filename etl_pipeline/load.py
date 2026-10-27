@@ -53,26 +53,41 @@ def upload_df_to_s3(df: pd.DataFrame, bucket: str, key: str, s3):
         raise
 
 
+def data_key(folder: str, filename: str, run_stamp: str) -> str:
+    """
+    Builds the S3 key for one file of one run.
+
+    Each run gets its own folder, e.g. transformed_data/20261027T160522Z/sales.csv,
+    so a later run never overwrites the files an earlier run produced.
+    """
+    return f"{folder}/{run_stamp}/{filename}"
+
+
 @task(name="Load Customers to S3-Bucket", retries=1, retry_delay_seconds=10, cache_policy=NO_CACHE)
-def upload_customers_to_s3(customers_df: pd.DataFrame, bucket: str, s3):
-    return upload_df_to_s3(customers_df, bucket, "transformed_data/customers.csv", s3)
+def upload_customers_to_s3(customers_df: pd.DataFrame, bucket: str, run_stamp: str, s3):
+    key = data_key("transformed_data", "customers.csv", run_stamp)
+    return upload_df_to_s3(customers_df, bucket, key, s3)
 
 
 @task(name="Load Products to S3-Bucket", retries=1, retry_delay_seconds=10, cache_policy=NO_CACHE)
-def upload_products_to_s3(products_df: pd.DataFrame, bucket: str, s3):
-    return upload_df_to_s3(products_df, bucket, "transformed_data/products.csv", s3)
+def upload_products_to_s3(products_df: pd.DataFrame, bucket: str, run_stamp: str, s3):
+    key = data_key("transformed_data", "products.csv", run_stamp)
+    return upload_df_to_s3(products_df, bucket, key, s3)
 
 
 @task(name="Load Stores to S3-Bucket", retries=1, retry_delay_seconds=10, cache_policy=NO_CACHE)
-def upload_stores_to_s3(stores_df: pd.DataFrame, bucket: str, s3):
-    return upload_df_to_s3(stores_df, bucket, "transformed_data/stores.csv", s3)
+def upload_stores_to_s3(stores_df: pd.DataFrame, bucket: str, run_stamp: str, s3):
+    key = data_key("transformed_data", "stores.csv", run_stamp)
+    return upload_df_to_s3(stores_df, bucket, key, s3)
 
 
 @task(name="Load Sales to S3-Bucket", retries=1, retry_delay_seconds=10, cache_policy=NO_CACHE)
-def upload_sales_to_s3(sales_df: pd.DataFrame, bucket: str, s3):
-    return upload_df_to_s3(sales_df, bucket, "transformed_data/sales.csv", s3)
+def upload_sales_to_s3(sales_df: pd.DataFrame, bucket: str, run_stamp: str, s3):
+    key = data_key("transformed_data", "sales.csv", run_stamp)
+    return upload_df_to_s3(sales_df, bucket, key, s3)
 
 
 @task(name="Load Raw Data to S3-Bucket", retries=1, retry_delay_seconds=10, cache_policy=NO_CACHE)
-def upload_raw_df_to_s3(raw_df: pd.DataFrame, bucket: str, s3):
-    return upload_df_to_s3(raw_df, bucket, "raw_data/raw_sales_data.csv", s3)
+def upload_raw_df_to_s3(raw_df: pd.DataFrame, bucket: str, run_stamp: str, s3):
+    key = data_key("raw_data", "raw_sales_data.csv", run_stamp)
+    return upload_df_to_s3(raw_df, bucket, key, s3)

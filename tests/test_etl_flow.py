@@ -98,7 +98,13 @@ def test_etl_process(
     assert confirm_kwargs["sales_path"] == "s3://fake_bucket/transformed_data/sales.csv"
     assert confirm_kwargs["s3"] is mock_boto3_client.return_value
 
-    mock_lambda_submit.assert_called_once_with("sales-pipeline-loader")
+    # The flow must tell the Lambda which files this run produced
+    mock_lambda_submit.assert_called_once()
+    assert mock_lambda_submit.call_args.args[0] == "sales-pipeline-loader"
+    keys = mock_lambda_submit.call_args.kwargs["payload"]["keys"]
+    assert keys["sales"] == "transformed_data/sales.csv"
+    assert set(keys) == {"customers", "products", "stores", "sales", "raw"}
+
     mock_lambda_response.result.assert_called_once()
 
 
