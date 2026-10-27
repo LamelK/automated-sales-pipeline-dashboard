@@ -1,7 +1,7 @@
 """Create the "Sales Overview" Metabase dashboard through the Metabase API.
 
-Everything is idempotent: re-running updates the existing collection, cards and
-dashboard instead of creating duplicates.
+Idempotent: re-running updates the existing collection, cards and dashboard
+instead of creating duplicates.
 
 Environment variables (never commit credentials):
     METABASE_URL       e.g. https://lamelsmetabase.fyi
@@ -15,60 +15,60 @@ import uuid
 import requests
 
 BASE = os.environ["METABASE_URL"].rstrip("/")
-DB_NAME = "sales-dashboard"          # the Metabase name for the MySQL connection
+DB_NAME = "sales-dashboard"          # Metabase's name for the MySQL connection
 COLLECTION_NAME = "Sales Overview"
 DASHBOARD_NAME = "Sales Overview"
 
-# sales.store_id — used by the dashboard's Store filter
-STORE_FIELD_ID = 83
-
-# Every query ignores cancelled orders so totals reflect real revenue.
-EXCLUDE_CANCELLED = "s.order_status <> 'cancelled'"
-
-# Cards that accept the Store filter. They only expose sales.store_id once, so the
-# field filter expands without an ambiguous column.
-STORE_FILTERED = True
-
-# Earthy palette: clay, olive, ochre, sand, bark, sage.
+# Bluish-earth palette: deep teal, teal, sea, slate, sand, stone.
 PALETTE = {
-    "terracotta": "#B85C38",
-    "olive": "#6B705C",
-    "ochre": "#C9A227",
-    "clay": "#A9714B",
-    "sage": "#A3B18A",
-    "bark": "#6B4F3A",
-    "sand": "#D4A373",
+    "deep_teal": "#14524F",
+    "teal": "#2A7168",
+    "sea": "#6E9A8E",
+    "slate": "#3F5B6B",
+    "sand": "#C7B299",
+    "stone": "#7A8B8B",
 }
 
-# Which colour each chart's metric uses.
+# Colour per chart metric (the metric column name as returned by the query).
 SERIES_COLORS = {
-    "Total revenue": {"revenue": PALETTE["terracotta"]},
-    "Items sold": {"items": PALETTE["olive"]},
-    "Average order value": {"avg_order": PALETTE["clay"]},
-    "Cancelled rate %": {"cancelled_pct": PALETTE["terracotta"]},
-    "Revenue trend with 7-day average": {"revenue": PALETTE["terracotta"], "revenue_7day_avg": PALETTE["olive"]},
-    "Payment method mix": {"revenue": PALETTE["terracotta"]},
-    "Top 10 products by revenue": {"revenue": PALETTE["ochre"]},
-    "Most sold products by units": {"units_sold": PALETTE["olive"]},
-    "Revenue share by store": {"revenue": PALETTE["clay"]},
-    "Revenue by day of week": {"revenue": PALETTE["sand"]},
-    "Sales by hour of day": {"revenue": PALETTE["bark"]},
-    "Top customers by revenue": {"revenue": PALETTE["sage"]},
-    "Order status breakdown": {"orders": PALETTE["ochre"]},
-    "Cumulative revenue through the day": {"cumulative_revenue": PALETTE["clay"]},
+    "Total revenue": {"revenue": PALETTE["deep_teal"]},
+    "Items sold": {"items": PALETTE["sea"]},
+    "Average order value": {"avg_order": PALETTE["slate"]},
+    "Cancelled rate %": {"cancelled_pct": PALETTE["stone"]},
+    "Revenue trend with 7-day average": {
+        "revenue": PALETTE["deep_teal"],
+        "revenue_7day_avg": PALETTE["sand"],
+    },
+    "Payment method mix": {"revenue": PALETTE["deep_teal"]},
+    "Top 10 products by revenue": {"revenue": PALETTE["teal"]},
+    "Most sold products by units": {"units_sold": PALETTE["sea"]},
+    "Revenue share by store": {"revenue": PALETTE["slate"]},
+    "Revenue by day of week": {"revenue": PALETTE["teal"]},
+    "Sales by hour of day": {"revenue": PALETTE["deep_teal"]},
+    "Top customers by revenue": {"revenue": PALETTE["sea"]},
+    "Order status breakdown": {"orders": PALETTE["stone"]},
+    "Cumulative revenue through the day": {"cumulative_revenue": PALETTE["slate"]},
 }
 
 # Pie slices are coloured per payment method.
 PIE_COLORS = {
-    "Card": PALETTE["terracotta"],
-    "EFT": PALETTE["olive"],
-    "Cash": PALETTE["ochre"],
-    "Voucher": PALETTE["bark"],
+    "Card": PALETTE["deep_teal"],
+    "EFT": PALETTE["teal"],
+    "Cash": PALETTE["sea"],
+    "Voucher": PALETTE["sand"],
+}
+
+# Dashboard filters. field_id points at the Metabase field the filter constrains.
+FILTERS = {
+    "store": {"field_id": 83, "display": "Store", "type": "string/="},          # sales.store_id
+    "payment": {"field_id": 88, "display": "Payment method", "type": "string/="},  # sales.payment_method
+    "category": {"field_id": 76, "display": "Product category", "type": "string/="},  # products.product_category
 }
 
 
+# ------------------------------------------------------------------ API helpers
 def session():
-    """Log in and return a requests session carrying the Metabase session token."""
+    """Log in and return a session carrying the Metabase session token."""
     s = requests.Session()
     s.headers.update({"Content-Type": "application/json"})
     resp = s.post(
@@ -82,7 +82,6 @@ def session():
 
 
 def database_id(s, name):
-    """Find the Metabase database id for the MySQL connection."""
     for db in s.get(f"{BASE}/api/database", timeout=30).json()["data"]:
         if db["name"] == name:
             return db["id"]
@@ -94,53 +93,49 @@ def collection_id(s, name):
     for item in s.get(f"{BASE}/api/collection", timeout=30).json():
         if item["name"] == name and item.get("location") == "/":
             return item["id"]
-    resp = s.post(f"{BASE}/api/collection", json={"name": name, "color": "#509EE3"}, timeout=30)
+    resp = s.post(f"{BASE}/api/collection", json={"name": name, "color": "#2A7168"}, timeout=30)
     resp.raise_for_status()
     return resp.json()["id"]
 
 
-def cards_in(s, coll_id):
-    """Map card name -> id for everything already in the collection."""
-    items = s.get(f"{BASE}/api/collection/{coll_id}/items", params={"models": "card"}, timeout=30)
-    return {i["name"]: i["id"] for i in items.json().get("data", [])}
-
-
-def dashboards_in(s, coll_id):
-    items = s.get(f"{BASE}/api/collection/{coll_id}/items", params={"models": "dashboard"}, timeout=30)
-    return {i["name"]: i["id"] for i in items.json().get("data", [])}
+def items_in(s, coll_id, model):
+    """Map name -> id for cards or dashboards already in the collection."""
+    resp = s.get(f"{BASE}/api/collection/{coll_id}/items", params={"models": model}, timeout=30)
+    return {i["name"]: i["id"] for i in resp.json().get("data", [])}
 
 
 def build_sql(spec):
     """
-    Replace the __STORE__ placeholder in a query with the optional store filter.
+    Replace the __FILTERS__ placeholder with the optional filters for this card.
 
-    `[[AND {{store}}]]` is ignored by Metabase when the filter has no value, and
-    expands to a store_id comparison when it does. The filter sits inside the
-    query's own WHERE clause so it filters the rows before aggregation.
+    Each [[AND {{tag}}]] block is dropped by Metabase when that filter has no
+    value, and becomes a field comparison when it does.
     """
     sql = spec["sql"].strip().rstrip(";")
-    if not spec["store_filter"]:
-        return sql.replace("__STORE__", ""), {}
+    wanted = spec.get("filters", [])
+    if not wanted:
+        return sql.replace("__FILTERS__", ""), {}
 
-    tag = {
-        "store": {
+    conditions = " ".join(f"[[AND {{{{{name}}}}}]]" for name in wanted)
+    tags = {}
+    for name in wanted:
+        f = FILTERS[name]
+        tags[name] = {
             "id": str(uuid.uuid4()),
-            "name": "store",
-            "display-name": "Store",
+            "name": name,
+            "display-name": f["display"],
             "type": "dimension",
-            "dimension": ["field", STORE_FIELD_ID, None],
-            "widget-type": "string/=",
+            "dimension": ["field", f["field_id"], None],
+            "widget-type": f["type"],
         }
-    }
-    return sql.replace("__STORE__", "[[AND {{store}}]]"), tag
+    return sql.replace("__FILTERS__", conditions), tags
 
 
 def upsert_card(s, db_id, coll_id, existing, spec):
-    """Create the card, or update it in place if a card with the same name exists."""
+    """Create the card, or update it in place when a card with that name exists."""
     sql, tags = build_sql(spec)
-    settings = dict(spec.get("settings", {}))
 
-    # Apply the earthy palette to this chart's metrics.
+    settings = dict(spec.get("settings", {}))
     series = dict(settings.get("series_settings", {}))
     for metric, colour in SERIES_COLORS.get(spec["name"], {}).items():
         series.setdefault(metric, {})["color"] = colour
@@ -169,10 +164,11 @@ def upsert_card(s, db_id, coll_id, existing, spec):
     return resp.json()["id"]
 
 
-# ---------------------------------------------------------------- card specs
-# Tables are referenced by their real names (not aliases) because a Metabase field
-# filter expands to "sales.store_id" and an alias would make that column unknown.
-# __STORE__ is replaced with the optional store filter by build_sql().
+# ------------------------------------------------------------------ card specs
+# Tables are named in full (sales.x, not s.x) because a field filter expands to
+# "sales.store_id" / "products.product_category" — an alias would break it.
+ALL_FILTERS = ["store", "payment", "category"]
+
 CARDS = [
     {
         "name": "Total revenue",
@@ -180,10 +176,11 @@ CARDS = [
         "sql": """
             SELECT ROUND(SUM(sales.total_sale), 2) AS revenue
             FROM sales
-            WHERE sales.order_status <> 'cancelled' __STORE__
+            JOIN products p ON p.product_id = sales.product_id
+            WHERE sales.order_status <> 'cancelled' __FILTERS__
         """,
         "settings": {"scalar.field": "revenue"},
-        "store_filter": True,
+        "filters": ALL_FILTERS,
         "description": "Revenue from all orders that were not cancelled.",
     },
     {
@@ -192,10 +189,11 @@ CARDS = [
         "sql": """
             SELECT SUM(sales.quantity_sold) AS items
             FROM sales
-            WHERE sales.order_status <> 'cancelled' __STORE__
+            JOIN products p ON p.product_id = sales.product_id
+            WHERE sales.order_status <> 'cancelled' __FILTERS__
         """,
         "settings": {"scalar.field": "items"},
-        "store_filter": True,
+        "filters": ALL_FILTERS,
         "description": "Units sold, excluding cancelled orders.",
     },
     {
@@ -204,10 +202,11 @@ CARDS = [
         "sql": """
             SELECT ROUND(AVG(sales.total_sale), 2) AS avg_order
             FROM sales
-            WHERE sales.order_status <> 'cancelled' __STORE__
+            JOIN products p ON p.product_id = sales.product_id
+            WHERE sales.order_status <> 'cancelled' __FILTERS__
         """,
         "settings": {"scalar.field": "avg_order"},
-        "store_filter": True,
+        "filters": ALL_FILTERS,
         "description": "Average value per sale line.",
     },
     {
@@ -218,7 +217,7 @@ CARDS = [
             FROM sales
         """,
         "settings": {"scalar.field": "cancelled_pct"},
-        "store_filter": False,
+        "filters": [],
         "description": "Share of all orders that were cancelled.",
     },
     {
@@ -228,7 +227,8 @@ CARDS = [
             WITH daily AS (
                 SELECT sales.transaction_date AS d, SUM(sales.total_sale) AS revenue
                 FROM sales
-                WHERE sales.order_status <> 'cancelled' __STORE__
+                JOIN products p ON p.product_id = sales.product_id
+                WHERE sales.order_status <> 'cancelled' __FILTERS__
                 GROUP BY sales.transaction_date
             )
             SELECT d AS date, revenue,
@@ -242,8 +242,8 @@ CARDS = [
             "series_settings": {"revenue": {"title": "Revenue"}, "revenue_7day_avg": {"title": "7-day average"}},
             "graph.show_values": False,
         },
-        "store_filter": True,
-        "description": "Daily revenue with a rolling 7-day average, so the trend shows instead of the noise. It fills in as weekly runs accumulate.",
+        "filters": ALL_FILTERS,
+        "description": "Revenue per trading day with a rolling 7-day average. Each pipeline run adds one day.",
     },
     {
         "name": "Payment method mix",
@@ -251,12 +251,13 @@ CARDS = [
         "sql": """
             SELECT sales.payment_method, ROUND(SUM(sales.total_sale), 2) AS revenue
             FROM sales
-            WHERE sales.order_status <> 'cancelled' __STORE__
+            JOIN products p ON p.product_id = sales.product_id
+            WHERE sales.order_status <> 'cancelled' __FILTERS__
             GROUP BY sales.payment_method
             ORDER BY revenue DESC
         """,
         "settings": {"pie.dimension": "payment_method", "pie.metric": "revenue", "pie.show_legend": True},
-        "store_filter": True,
+        "filters": ["store", "category"],
         "description": "Which payment methods bring in the revenue.",
     },
     {
@@ -266,13 +267,13 @@ CARDS = [
             SELECT p.product_name, ROUND(SUM(sales.total_sale), 2) AS revenue, SUM(sales.quantity_sold) AS units
             FROM sales
             JOIN products p ON p.product_id = sales.product_id
-            WHERE sales.order_status <> 'cancelled' __STORE__
+            WHERE sales.order_status <> 'cancelled' __FILTERS__
             GROUP BY p.product_name
             ORDER BY revenue DESC
             LIMIT 10
         """,
         "settings": {"graph.dimensions": ["product_name"], "graph.metrics": ["revenue"]},
-        "store_filter": True,
+        "filters": ALL_FILTERS,
         "description": "Revenue leaders - the products that actually make the money.",
     },
     {
@@ -282,13 +283,13 @@ CARDS = [
             SELECT p.product_name, SUM(sales.quantity_sold) AS units_sold
             FROM sales
             JOIN products p ON p.product_id = sales.product_id
-            WHERE sales.order_status <> 'cancelled' __STORE__
+            WHERE sales.order_status <> 'cancelled' __FILTERS__
             GROUP BY p.product_name
             ORDER BY units_sold DESC
             LIMIT 10
         """,
         "settings": {"graph.dimensions": ["product_name"], "graph.metrics": ["units_sold"]},
-        "store_filter": True,
+        "filters": ALL_FILTERS,
         "description": "Volume leaders - what customers buy most often, regardless of price.",
     },
     {
@@ -302,12 +303,13 @@ CARDS = [
                    ), 1) AS pct_of_total
             FROM sales
             JOIN stores st ON st.store_id = sales.store_id
-            WHERE sales.order_status <> 'cancelled'
+            JOIN products p ON p.product_id = sales.product_id
+            WHERE sales.order_status <> 'cancelled' __FILTERS__
             GROUP BY st.store_location, st.store_region
             ORDER BY revenue DESC
         """,
         "settings": {"graph.dimensions": ["store"], "graph.metrics": ["revenue"]},
-        "store_filter": False,
+        "filters": ["payment", "category"],
         "description": "Which stores carry the business, and their share of total revenue.",
     },
     {
@@ -316,12 +318,13 @@ CARDS = [
         "sql": """
             SELECT sales.day_of_week, ROUND(SUM(sales.total_sale), 2) AS revenue, COUNT(*) AS orders
             FROM sales
-            WHERE sales.order_status <> 'cancelled' __STORE__
+            JOIN products p ON p.product_id = sales.product_id
+            WHERE sales.order_status <> 'cancelled' __FILTERS__
             GROUP BY sales.day_of_week
             ORDER BY FIELD(sales.day_of_week,'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
         """,
         "settings": {"graph.dimensions": ["day_of_week"], "graph.metrics": ["revenue"]},
-        "store_filter": True,
+        "filters": ALL_FILTERS,
         "description": "Trading pattern across the week.",
     },
     {
@@ -332,12 +335,13 @@ CARDS = [
                    ROUND(SUM(sales.total_sale), 2) AS revenue,
                    COUNT(*) AS orders
             FROM sales
-            WHERE sales.order_status <> 'cancelled' __STORE__
+            JOIN products p ON p.product_id = sales.product_id
+            WHERE sales.order_status <> 'cancelled' __FILTERS__
             GROUP BY HOUR(sales.transaction_time)
             ORDER BY hour_of_day
         """,
         "settings": {"graph.dimensions": ["hour_of_day"], "graph.metrics": ["revenue"]},
-        "store_filter": True,
+        "filters": ALL_FILTERS,
         "description": "When the shop actually sells - useful for staffing.",
     },
     {
@@ -347,13 +351,14 @@ CARDS = [
             SELECT c.customer_name, ROUND(SUM(sales.total_sale), 2) AS revenue, COUNT(*) AS orders
             FROM sales
             JOIN customers c ON c.customer_id = sales.customer_id
-            WHERE sales.order_status <> 'cancelled' __STORE__
+            JOIN products p ON p.product_id = sales.product_id
+            WHERE sales.order_status <> 'cancelled' __FILTERS__
             GROUP BY c.customer_name
             ORDER BY revenue DESC
             LIMIT 10
         """,
         "settings": {"graph.dimensions": ["customer_name"], "graph.metrics": ["revenue"]},
-        "store_filter": True,
+        "filters": ALL_FILTERS,
         "description": "Highest-value customers.",
     },
     {
@@ -366,7 +371,7 @@ CARDS = [
             ORDER BY orders DESC
         """,
         "settings": {"graph.dimensions": ["order_status"], "graph.metrics": ["orders"]},
-        "store_filter": False,
+        "filters": [],
         "description": "How many orders complete, and how much value sits in cancelled ones.",
     },
     {
@@ -378,7 +383,8 @@ CARDS = [
             FROM (
                 SELECT HOUR(sales.transaction_time) AS hour_of_day, SUM(sales.total_sale) AS revenue
                 FROM sales
-                WHERE sales.order_status <> 'cancelled' __STORE__
+                JOIN products p ON p.product_id = sales.product_id
+                WHERE sales.order_status <> 'cancelled' __FILTERS__
                 GROUP BY HOUR(sales.transaction_time)
             ) hourly
             ORDER BY hour_of_day
@@ -388,12 +394,12 @@ CARDS = [
             "graph.metrics": ["cumulative_revenue"],
             "series_settings": {"cumulative_revenue": {"title": "Cumulative revenue"}},
         },
-        "store_filter": True,
+        "filters": ALL_FILTERS,
         "description": "How the day accumulates - the shape of trading, not just the total.",
     },
 ]
 
-# Dashboard grid layout: (card name, col, row, width, height) on a 24-column grid
+# Dashboard grid: (card name, col, row, width, height) on a 24-column grid.
 LAYOUT = [
     ("Total revenue", 0, 0, 6, 3),
     ("Items sold", 6, 0, 6, 3),
@@ -417,43 +423,44 @@ def main():
     db_id = database_id(s, DB_NAME)
     coll_id = collection_id(s, COLLECTION_NAME)
 
-    existing_cards = cards_in(s, coll_id)
+    existing_cards = items_in(s, coll_id, "card")
     card_ids = {}
     for spec in CARDS:
         card_ids[spec["name"]] = upsert_card(s, db_id, coll_id, existing_cards, spec)
         print(f"card: {spec['name']} (id {card_ids[spec['name']]})")
 
-    existing_dashboards = dashboards_in(s, coll_id)
-    store_param = {
-        "id": str(uuid.uuid4()),
-        "name": "Store",
-        "slug": "store",
-        "type": "string/=",
-        "sectionId": "location",
-    }
+    # One dashboard parameter per filter, plus the id needed for the mappings.
+    param_ids = {}
+    parameters = []
+    for name, f in FILTERS.items():
+        pid = str(uuid.uuid4())
+        param_ids[name] = pid
+        parameters.append({"id": pid, "name": f["display"], "slug": name, "type": f["type"]})
 
+    existing_dashboards = items_in(s, coll_id, "dashboard")
     if DASHBOARD_NAME in existing_dashboards:
         dash_id = existing_dashboards[DASHBOARD_NAME]
         s.put(f"{BASE}/api/dashboard/{dash_id}",
-              json={"name": DASHBOARD_NAME, "parameters": [store_param]}, timeout=30).raise_for_status()
+              json={"name": DASHBOARD_NAME, "parameters": parameters}, timeout=30).raise_for_status()
     else:
         resp = s.post(f"{BASE}/api/dashboard",
-                      json={"name": DASHBOARD_NAME, "collection_id": coll_id, "parameters": [store_param]},
+                      json={"name": DASHBOARD_NAME, "collection_id": coll_id, "parameters": parameters},
                       timeout=30)
         resp.raise_for_status()
         dash_id = resp.json()["id"]
 
-    # Replace the dashboard's cards with our layout. Negative ids are temporary.
+    # Replace the dashboard's cards with this layout. Negative ids are temporary.
     by_name = {c["name"]: c for c in CARDS}
     dash_cards = []
     for name, col, row, size_x, size_y in LAYOUT:
-        mappings = []
-        if by_name[name]["store_filter"]:
-            mappings = [{
-                "parameter_id": store_param["id"],
+        mappings = [
+            {
+                "parameter_id": param_ids[f],
                 "card_id": card_ids[name],
-                "target": ["dimension", ["template-tag", "store"]],
-            }]
+                "target": ["dimension", ["template-tag", f]],
+            }
+            for f in by_name[name]["filters"]
+        ]
         dash_cards.append({
             "id": -len(dash_cards) - 1,
             "card_id": card_ids[name],
@@ -464,8 +471,7 @@ def main():
             "parameter_mappings": mappings,
             "visualization_settings": {},
         })
-    put = s.put(f"{BASE}/api/dashboard/{dash_id}/cards", json={"cards": dash_cards}, timeout=60)
-    put.raise_for_status()
+    s.put(f"{BASE}/api/dashboard/{dash_id}/cards", json={"cards": dash_cards}, timeout=60).raise_for_status()
 
     print(f"\ndashboard: {BASE}/dashboard/{dash_id}")
 

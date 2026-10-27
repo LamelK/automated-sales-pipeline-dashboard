@@ -64,7 +64,14 @@ def standardize_types(df):
     return df
 
 @task(name="🧼 Transform Sales Data", cache_policy=NO_CACHE)
-def transform_sales_data(df_raw):
+def transform_sales_data(df_raw, run_date=None):
+    """
+    Cleans the raw data and returns (transformed_df, raw_df).
+
+    run_date: when given, every sale is dated with it. The source data always
+    carries the same fixed date, so without this each run would pile onto one
+    day and the revenue trend could never move.
+    """
     logger = get_run_logger()
     logger.info("🔧 Starting transformation...")
 
@@ -76,6 +83,13 @@ def transform_sales_data(df_raw):
 
     df = standardize_types(df)
     logger.info("✔️ Standardized data types.")
+
+    # Stamp the sales with the day this pipeline actually ran, so weekly runs
+    # build a real trend instead of overloading the source's fixed date.
+    if run_date is not None:
+        df["transaction_date"] = run_date
+        df["day_of_week"] = run_date.strftime("%A")
+        logger.info(f"📅 Sales dated {run_date} ({run_date.strftime('%A')}).")
 
     df = drop_invalid_rows(df)
     logger.info("✔️ Dropped invalid rows.")

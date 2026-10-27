@@ -58,6 +58,14 @@ DDL = [
 
 
 def handler(event, context):
+    """
+    Creates the tables.
+
+    Send {"action": "reset"} to empty the sales table first — useful when the
+    dataset should start from a clean, single run.
+    """
+    action = (event or {}).get("action", "create")
+
     conn = pymysql.connect(
         host=os.environ["RDS_HOST"],
         user=os.environ["RDS_USER"],
@@ -70,6 +78,12 @@ def handler(event, context):
 
     try:
         with conn.cursor() as cur:
+            if action == "reset":
+                cur.execute("DELETE FROM sales")
+                conn.commit()
+                print("Sales table cleared.")
+                return {"status": "success", "message": "sales table cleared"}
+
             for statement in DDL:
                 cur.execute(statement)
         conn.commit()

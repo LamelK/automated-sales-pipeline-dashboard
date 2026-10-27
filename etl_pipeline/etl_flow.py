@@ -108,7 +108,8 @@ def main():
 
         # One stamp per run. Every file this run writes goes in its own S3
         # folder, so runs never overwrite each other.
-        run_stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        run_started = datetime.now(timezone.utc)
+        run_stamp = run_started.strftime("%Y%m%dT%H%M%SZ")
         logger.info(f"🗂️ Run folder: {run_stamp}")
 
         # Initialize the boto3 S3 client for use in the load tasks
@@ -129,7 +130,7 @@ def main():
 
         # ETL Stage 2: Transform the raw dataframe into structured form
         start = time.time()
-        transformed_df, raw_df = transform_sales_data(df_raw)
+        transformed_df, raw_df = transform_sales_data(df_raw, run_date=run_started.date())
         logger.info(f"🔧 Transform phase completed in {round(time.time() - start, 2)}s.")
 
         if transformed_df.empty:
