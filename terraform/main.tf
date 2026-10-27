@@ -279,12 +279,8 @@ resource "aws_security_group" "metabase" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  ingress {
-    from_port   = 3000
-    to_port     = 3000
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  # Port 3000 is deliberately closed: traffic arrives through the Cloudflare
+  # tunnel (outbound-only), so there is no reason to expose Metabase directly.
 
   egress {
     from_port   = 0
