@@ -249,7 +249,11 @@ resource "aws_security_group" "rds" {
     from_port       = 3306
     to_port         = 3306
     protocol        = "tcp"
-    security_groups = [aws_security_group.lambda.id, aws_security_group.metabase.id]
+    security_groups = [
+      aws_security_group.lambda.id,
+      aws_security_group.metabase.id,
+      aws_security_group.schema_initializer.id,
+    ]
   }
 
   egress {
@@ -290,6 +294,22 @@ resource "aws_security_group" "metabase" {
   }
 }
 
+resource "aws_security_group" "schema_initializer" {
+  name   = "sales-pipeline-schema-init-sg"
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "sales-pipeline-schema-init-sg"
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
 ######################
 # RDS
 ######################
@@ -304,29 +324,31 @@ moved {
   to   = aws_db_subnet_group.db
 }
 
-resource "aws_db_subnet_group" "db" {
-  name       = "sales-pipeline-db-subnets"
-  subnet_ids = [aws_subnet.public_1.id, aws_subnet.public_2.id]
+resource "aws_db_subnet_group" "db_private" {
+  name        = "sales-pipeline-db-subnets-private"
+  description = "Private subnets for the sales pipeline database"
+  subnet_ids  = [aws_subnet.private_1.id, aws_subnet.private_2.id]
 
   tags = {
-    Name = "sales-pipeline-db-subnets"
+    Name = "sales-pipeline-db-subnets-private"
   }
 }
+
 
 resource "aws_db_instance" "etl_database" {
   identifier             = "electronics-shop-db"
   allocated_storage      = 20
   storage_type           = "gp2"
   engine                 = "mysql"
-  engine_version         = "5.7"
+  engine_version         = "8.4"
   instance_class         = var.db_instance_type
   db_name                = var.db_name
   username               = var.db_username
   password               = random_password.db_password.result
-  parameter_group_name   = "default.mysql5.7"
+  parameter_group_name   = "default.mysql8.4"
   publicly_accessible    = false
   skip_final_snapshot    = true
-  db_subnet_group_name   = aws_db_subnet_group.db.name
+  db_subnet_group_name   = aws_db_subnet_group.db_private.name
   vpc_security_group_ids = [aws_security_group.rds.id]
 
   tags = {
@@ -342,7 +364,7 @@ resource "aws_lambda_function" "s3_to_rds" {
   function_name    = "sales-pipeline-loader"
   role             = aws_iam_role.lambda_role.arn
   handler          = "lambda_function.lambda_handler"
-  runtime          = "python3.9"
+  runtime          = "python3.13"
   timeout          = 180
   filename         = "${path.module}/lambda_deployment_package1.zip"
   source_code_hash = filebase64sha256("${path.module}/lambda_deployment_package1.zip")
@@ -364,6 +386,34 @@ resource "aws_lambda_function" "s3_to_rds" {
 
   tags = {
     Name = "sales-pipeline-loader"
+  }
+}
+
+resource "aws_lambda_function" "schema_initializer" {
+  function_name    = "sales-pipeline-schema-initializer"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "lambda_schema_initializer.handler"
+  runtime          = "python3.13"
+  timeout          = 120
+  filename         = "${path.module}/lambda_schema_initializer1.zip"
+  source_code_hash = filebase64sha256("${path.module}/lambda_schema_initializer1.zip")
+
+  vpc_config {
+    subnet_ids         = [aws_subnet.private_1.id, aws_subnet.private_2.id]
+    security_group_ids = [aws_security_group.schema_initializer.id]
+  }
+
+  environment {
+    variables = {
+      RDS_HOST     = aws_db_instance.etl_database.address
+      RDS_USER     = aws_db_instance.etl_database.username
+      RDS_PASSWORD = random_password.db_password.result
+      RDS_DB       = aws_db_instance.etl_database.db_name
+    }
+  }
+
+  tags = {
+    Name = "sales-pipeline-schema-initializer"
   }
 }
 
@@ -437,6 +487,11 @@ output "db_password" {
 output "ssh_command" {
   value       = "ssh -i ./metabase ubuntu@${aws_instance.metabase.public_ip}"
   description = "SSH command to connect to Metabase EC2"
+}
+
+output "schema_initializer_function" {
+  value       = aws_lambda_function.schema_initializer.function_name
+  description = "Lambda that creates the database schema; invoke it once after a fresh RDS instance"
 }
 
 output "rds_tunnel_command" {

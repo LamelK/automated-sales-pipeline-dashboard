@@ -1,6 +1,9 @@
 import os
 import pymysql
 
+# MySQL 8.4 dropped mysql_native_password, so caching_sha2_password needs a TLS channel
+CA_BUNDLE = os.path.join(os.path.dirname(__file__), "global-bundle.pem")
+
 DDL = [
     """
     CREATE TABLE IF NOT EXISTS products (
@@ -61,6 +64,8 @@ def handler(event, context):
         password=os.environ["RDS_PASSWORD"],
         database=os.environ["RDS_DB"],
         connect_timeout=10,
+        ssl_ca=CA_BUNDLE,
+        ssl_verify_cert=True,
     )
 
     try:

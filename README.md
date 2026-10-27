@@ -120,12 +120,14 @@ Everything this project creates in AWS carries a `Name` tag of the form `sales-p
 | `sales-pipeline-lambda-role` | Lambda IAM role |
 | `sales-pipeline-metabase` | EC2 instance running Metabase |
 | `sales-pipeline-metabase-key` | EC2 key pair |
+| `sales-pipeline-schema-initializer` | Lambda that creates the database schema |
+| `sales-pipeline-schema-init-sg` | Security group for the schema-initializer Lambda |
 
 The RDS instance **identifier** stays `electronics-shop-db` (renaming it changes the endpoint DNS and would break Metabase's saved connection), but its `Name` tag is `sales-pipeline-db`.
 
 ## __Database schema__
 
-The database is a small star schema: three dimension tables and one fact table, created once by hand in MySQL (see [Initializing RDS](#34-accessing-metabase-and-initializing-rds)).
+The database is a small star schema: three dimension tables and one fact table, created once by the `sales-pipeline-schema-initializer` Lambda (see [Initializing RDS](#34-accessing-metabase-and-initializing-rds)).
 
 | Table | Key | Other columns |
 |---|---|---|
@@ -211,7 +213,7 @@ git clone https://github.com/LamelK/automated-sales-pipeline-dashboard.git
 ```
 
 - It is recommended to use a Linux terminal (e.g., WSL). 
-- create a Python 3.9 environment using either venv or conda(need to install first). After creating the environment, activate it and install the required packages.
+- create a Python 3.13 environment using either venv or conda(need to install first). After creating the environment, activate it and install the required packages. The Lambdas run on `python3.13`.
 
 Change the directory to the root folder of the repository.
 ```
@@ -237,7 +239,11 @@ pip install -r requirements.txt
 #### 3.3. Spin up AWS Services
 -  Ensure that you have your AWS credentials configured in your system.
 -  in the same folder as the terraform files,type `terraform plan` in the terminal. This will show your spin-up plan and any other errors that might have been improperly configured.
-- `terraform/lambda_deployment_package1.zip` is the deployment package Terraform uploads for the `sales-pipeline-loader` Lambda. It must contain `lambda/lambda_function.py` plus its `pymysql` dependency — rebuild the zip whenever the loader changes, otherwise `terraform apply` deploys the old code.
+- The files in `terraform/` ending in `.zip` are the Lambda packages Terraform uploads (`lambda_deployment_package1.zip` → loader, `lambda_schema_initializer1.zip` → schema initializer). Each must contain its handler, the `pymysql` dependency and the RDS CA bundle `global-bundle.pem`. Rebuild them after any handler change, otherwise `terraform apply` deploys the old code:
+
+    ```bash
+    python lambda/build_packages.py
+    ```
 -  After reviewing the plan, type `terraform apply`. This process will take a while as it spins up AWS services.
 -  If not successful, see which services failed and fix them.
 -  If successful, it will show you the output with some of your credentials. Store them safely. The DB password will not be displayed. To get it, input:
@@ -257,8 +263,15 @@ pip install -r requirements.txt
       ```
       Once connected, install Java 21 first, then Metabase, and finally start the Metabase service manually.
 ##### Initializing RDS
-  - Create the schema once, by hand, with a MySQL client (for example MySQL Workbench) pointed at the RDS instance. The four tables, their keys and their foreign keys must exist before the first flow run — see [Database schema](#database-schema).
-  - RDS is **not** reachable from the internet (`publicly_accessible = false`); only the Lambda and Metabase security groups may connect. To use a client from your machine, tunnel through the Metabase instance:
+  - Create the schema once by invoking the `sales-pipeline-schema-initializer` Lambda (the DDL lives in `lambda/lambda_schema_initializer.py` and is idempotent):
+
+      ```bash
+      aws lambda invoke --function-name sales-pipeline-schema-initializer --payload '{}' out.json && cat out.json
+      ```
+
+      It must run before the first flow, and the four tables it creates are described in [Database schema](#database-schema).
+  - RDS runs **MySQL 8.4** on `db.t3.micro` inside the private subnets (`publicly_accessible = false`). Only the loader Lambda, the schema-initializer Lambda and Metabase may connect — by security group, not by IP. MySQL 8.4 removed `mysql_native_password`, so both Lambdas connect over TLS using the bundled `global-bundle.pem` CA.
+  - To use a client from your machine, tunnel through the Metabase instance:
 
       ```bash
       ssh -i ./metabase -N -L 3306:electronics-shop-db.c3gmowagaqoc.eu-north-1.rds.amazonaws.com:3306 ubuntu@<metabase-public-ip>
