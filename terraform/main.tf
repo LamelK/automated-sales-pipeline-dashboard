@@ -225,13 +225,6 @@ resource "aws_security_group" "rds" {
     security_groups = [aws_security_group.lambda.id, aws_security_group.metabase.id]
   }
 
-  ingress {
-    from_port   = 3306
-    to_port     = 3306
-    protocol    = "tcp"
-    cidr_blocks = ["${var.allowed_ip}/32"]
-  }
-
   egress {
     from_port   = 0
     to_port     = 0
@@ -291,7 +284,7 @@ resource "aws_db_instance" "etl_database" {
   username               = var.db_username
   password               = random_password.db_password.result
   parameter_group_name   = "default.mysql5.7"
-  publicly_accessible    = true
+  publicly_accessible    = false
   skip_final_snapshot    = true
   db_subnet_group_name   = aws_db_subnet_group.private.name
   vpc_security_group_ids = [aws_security_group.rds.id]

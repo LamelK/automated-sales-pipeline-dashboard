@@ -233,6 +233,13 @@ pip install -r requirements.txt
       Once connected, install Java 21 first, then Metabase, and finally start the Metabase service manually.
 ##### Initializing RDS
   - Create the schema once, by hand, with a MySQL client (for example MySQL Workbench) pointed at the RDS instance. The four tables, their keys and their foreign keys must exist before the first flow run — see [Database schema](#database-schema).
+  - RDS is **not** reachable from the internet (`publicly_accessible = false`); only the Lambda and Metabase security groups may connect. To use a client from your machine, tunnel through the Metabase instance:
+
+      ```bash
+      ssh -i ./metabase -N -L 3306:electronics-shop-db.c3gmowagaqoc.eu-north-1.rds.amazonaws.com:3306 ubuntu@<metabase-public-ip>
+      ```
+
+      Then connect the client to `127.0.0.1:3306` with the database name, username and password from the Terraform output.
   - Metabase will also prompt you to enter the **database name**, **username**, **password**, and **host**.  
   Use the values you received from the Terraform output, this step links Metabase to the RDS instance.
 

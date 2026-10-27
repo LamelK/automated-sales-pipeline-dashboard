@@ -48,12 +48,6 @@ variable "db_username" {
   default     = "admin"
 }
 
-variable "allowed_ip" {
-  description = "Public IP allowed to reach the database from outside the VPC (for local dev/Workbench)"
-  type        = string
-  default     = "102.254.103.41"
-}
-
 variable "bucket_prefix" {
   description = "Name of the S3 bucket that stores the pipeline data. Must be globally unique"
   type        = string
