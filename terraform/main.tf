@@ -440,26 +440,65 @@ resource "aws_instance" "metabase" {
 
   user_data = <<-EOF
             #!/bin/bash
-            # Update and install dependencies
-            sudo apt update -y
-            sudo apt install -y openjdk-21-jdk curl
+            set -euxo pipefail
+            apt-get update -y
+            apt-get install -y openjdk-21-jdk curl
 
-            # Download Metabase
-            curl -fL -o metabase.jar https://downloads.metabase.com/v0.64.1/metabase.jar
+            mkdir -p /opt/metabase
+            curl -fL -o /opt/metabase/metabase.jar https://downloads.metabase.com/v0.64.1/metabase.jar
 
-            # Create 2GB swap file
-            sudo fallocate -l 2G /swapfile
-            sudo chmod 600 /swapfile
-            sudo mkswap /swapfile
-            sudo swapon /swapfile
-            echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+            # 2 GB swap as a margin over the instance RAM
+            fallocate -l 2G /swapfile
+            chmod 600 /swapfile
+            mkswap /swapfile
+            swapon /swapfile
+            echo '/swapfile none swap sw 0 0' >> /etc/fstab
 
-            # Run Metabase
-            nohup java -jar metabase.jar > metabase.log 2>&1 &
+            # Run Metabase under systemd so it restarts on crash and at boot
+            cat > /etc/systemd/system/metabase.service <<'UNIT'
+            [Unit]
+            Description=Metabase
+            After=network-online.target
+            Wants=network-online.target
+
+            [Service]
+            Type=simple
+            WorkingDirectory=/opt/metabase
+            ExecStart=/usr/bin/java -Xmx1200m -jar /opt/metabase/metabase.jar
+            Restart=always
+            RestartSec=10
+            StandardOutput=append:/var/log/metabase.log
+            StandardError=append:/var/log/metabase.log
+
+            [Install]
+            WantedBy=multi-user.target
+            UNIT
+
+            systemctl daemon-reload
+            systemctl enable --now metabase
             EOF
 
   tags = {
     Name = "sales-pipeline-metabase"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "metabase_status_check" {
+  alarm_name          = "sales-pipeline-metabase-status-check"
+  alarm_description   = "Recover the Metabase instance when its status checks fail"
+  namespace           = "AWS/EC2"
+  metric_name         = "StatusCheckFailed_System"
+  dimensions          = { InstanceId = aws_instance.metabase.id }
+  statistic           = "Maximum"
+  period              = 60
+  evaluation_periods  = 2
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = ["arn:aws:automate:${var.aws_region}:ec2:recover"]
+
+  tags = {
+    Name = "sales-pipeline-metabase-status-check"
   }
 }
 
