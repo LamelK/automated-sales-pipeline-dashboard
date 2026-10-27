@@ -483,6 +483,21 @@ resource "aws_instance" "metabase" {
   }
 }
 
+resource "aws_eip" "metabase" {
+  domain = "vpc"
+
+  tags = {
+    Name = "sales-pipeline-metabase-eip"
+  }
+
+  depends_on = [aws_internet_gateway.gw]
+}
+
+resource "aws_eip_association" "metabase" {
+  instance_id   = aws_instance.metabase.id
+  allocation_id = aws_eip.metabase.id
+}
+
 resource "aws_cloudwatch_metric_alarm" "metabase_status_check" {
   alarm_name          = "sales-pipeline-metabase-status-check"
   alarm_description   = "Recover the Metabase instance when its status checks fail"
@@ -511,7 +526,8 @@ output "s3_bucket_name" {
 }
 
 output "metabase_public_ip" {
-  value = aws_instance.metabase.public_ip
+  value       = aws_eip.metabase.public_ip
+  description = "Static (Elastic IP) address of the Metabase host; survives stop/start"
 }
 
 output "rds_endpoint" {
@@ -524,7 +540,7 @@ output "db_password" {
 }
 
 output "ssh_command" {
-  value       = "ssh -i ./metabase ubuntu@${aws_instance.metabase.public_ip}"
+  value       = "ssh -i ./metabase ubuntu@${aws_eip.metabase.public_ip}"
   description = "SSH command to connect to Metabase EC2"
 }
 
@@ -534,6 +550,6 @@ output "schema_initializer_function" {
 }
 
 output "rds_tunnel_command" {
-  value       = "ssh -i ./metabase -N -L 3306:${aws_db_instance.etl_database.address}:3306 ubuntu@${aws_instance.metabase.public_ip}"
+  value       = "ssh -i ./metabase -N -L 3306:${aws_db_instance.etl_database.address}:3306 ubuntu@${aws_eip.metabase.public_ip}"
   description = "Port-forward localhost:3306 to the private RDS instance through the Metabase host"
 }
