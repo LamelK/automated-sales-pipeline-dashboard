@@ -176,7 +176,7 @@ Only after passing all these checks is the flow deployed.
 
 ### 1.Mockaroo
 First, head to [Mockaroo](https://www.mockaroo.com) and sign up for an account.  
-After signing up, open a new tab and paste this link: [Mockaroo Dataset](https://www.mockaroo.com/0935e020) to clone the schema.  
+After signing up, open a new tab and paste this link: [Mockaroo Dataset](https://www.mockaroo.com/72087140) to clone the schema. The pipeline reads the schema id from `MOCKAROO_SCHEMA_ID` in `etl_pipeline/extract.py`.  
 
 Once cloned, navigate to the profile icon to find your API key. Make sure to store it securely.
 

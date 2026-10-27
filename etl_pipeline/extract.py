@@ -4,6 +4,9 @@ import pandas as pd
 from io import StringIO
 from prefect.tasks import NO_CACHE
 
+# Mockaroo schema id (https://www.mockaroo.com/<id>) — swap this to point the pipeline at another schema
+MOCKAROO_SCHEMA_ID = "72087140"
+
 @task(retries=1, retry_delay_seconds=10, name="📥 Extract from Mockaroo", cache_policy=NO_CACHE)
 def extract_from_mockaroo(api_key: str, save_path: str = "raw_sales_data.csv", count: int = 500) -> pd.DataFrame:
     """
@@ -11,7 +14,7 @@ def extract_from_mockaroo(api_key: str, save_path: str = "raw_sales_data.csv", c
     Retries on failure up to 3 times.
     """
     logger = get_run_logger()
-    url = f"https://api.mockaroo.com/api/0935e020?key={api_key}&count={count}"
+    url = f"https://api.mockaroo.com/api/{MOCKAROO_SCHEMA_ID}?key={api_key}&count={count}"
     logger.info(f"🔍 Starting data extraction from Mockaroo with {count} rows...")
 
     try:
