@@ -98,19 +98,6 @@ __10.User Consumption:__
 
 ---
 
-## __Building the dashboard from code__
-
-The **Sales Overview** dashboard is created through the Metabase API rather than by hand, so it can be rebuilt on any environment:
-
-```bash
-export METABASE_URL=https://lamelsmetabase.fyi
-export METABASE_EMAIL=you@example.com
-export METABASE_PASSWORD=...
-python scripts/create_metabase_dashboard.py
-```
-
-The script is idempotent — re-running updates the existing collection, cards and dashboard. It creates thirteen cards (revenue KPIs, revenue trend with a 7-day average, cumulative intraday revenue, top products by revenue and by units, store share, payment mix, day-of-week and hour-of-day patterns, top customers, order status) plus a **Store** filter wired to every store-dependent card, and prints a public link for sharing the dashboard without a login.
-
 ## __Resource naming__
 
 Everything this project creates in AWS carries a `Name` tag of the form `sales-pipeline-<role>`, plus `Project = sales-pipeline` and `ManagedBy = terraform` from the provider's `default_tags`. Consequently:
