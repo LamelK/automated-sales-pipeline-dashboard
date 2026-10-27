@@ -217,6 +217,7 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc_access" {
 }
 
 
+
 ######################
 # Security Groups
 ######################
@@ -272,12 +273,8 @@ resource "aws_security_group" "metabase" {
     Name = "sales-pipeline-metabase-sg"
   }
 
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  # No inbound rules at all: the only way to reach this host is the Cloudflare
+  # tunnel. To regain a shell, temporarily add a port 22 rule in the AWS console.
 
   # Port 3000 is deliberately closed: traffic arrives through the Cloudflare
   # tunnel (outbound-only), so there is no reason to expose Metabase directly.
