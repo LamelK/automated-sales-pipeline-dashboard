@@ -1,5 +1,12 @@
 provider "aws" {
   region = var.aws_region
+
+  default_tags {
+    tags = {
+      Project   = "sales-pipeline"
+      ManagedBy = "terraform"
+    }
+  }
 }
 
 ######################
@@ -119,6 +126,10 @@ resource "aws_route_table_association" "private_assoc_2" {
 
 resource "aws_s3_bucket" "data_bucket" {
   bucket = var.bucket_prefix
+
+  tags = {
+    Name = "sales-pipeline-data-bucket"
+  }
 }
 
 resource "aws_s3_object" "raw_data_folder" {
@@ -138,6 +149,10 @@ resource "aws_vpc_endpoint" "s3" {
   service_name      = "com.amazonaws.${var.aws_region}.s3"
   vpc_endpoint_type = "Gateway"
   route_table_ids   = [aws_route_table.private.id]
+
+  tags = {
+    Name = "sales-pipeline-s3-endpoint"
+  }
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -164,6 +179,10 @@ resource "aws_vpc_endpoint" "s3" {
 
 resource "aws_iam_role" "lambda_role" {
   name = "sales-pipeline-lambda-role"
+
+  tags = {
+    Name = "sales-pipeline-lambda-role"
+  }
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -206,6 +225,10 @@ resource "aws_security_group" "lambda" {
   name   = "sales-pipeline-lambda-sg"
   vpc_id = aws_vpc.main.id
 
+  tags = {
+    Name = "sales-pipeline-lambda-sg"
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -217,6 +240,10 @@ resource "aws_security_group" "lambda" {
 resource "aws_security_group" "rds" {
   name   = "sales-pipeline-rds-sg"
   vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "sales-pipeline-rds-sg"
+  }
 
   ingress {
     from_port       = 3306
@@ -236,6 +263,10 @@ resource "aws_security_group" "rds" {
 resource "aws_security_group" "metabase" {
   name   = "sales-pipeline-metabase-sg"
   vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "sales-pipeline-metabase-sg"
+  }
 
   ingress {
     from_port   = 22
@@ -268,9 +299,18 @@ resource "random_password" "db_password" {
   special = false
 }
 
-resource "aws_db_subnet_group" "private" {
+moved {
+  from = aws_db_subnet_group.private
+  to   = aws_db_subnet_group.db
+}
+
+resource "aws_db_subnet_group" "db" {
   name       = "sales-pipeline-db-subnets"
   subnet_ids = [aws_subnet.public_1.id, aws_subnet.public_2.id]
+
+  tags = {
+    Name = "sales-pipeline-db-subnets"
+  }
 }
 
 resource "aws_db_instance" "etl_database" {
@@ -286,8 +326,12 @@ resource "aws_db_instance" "etl_database" {
   parameter_group_name   = "default.mysql5.7"
   publicly_accessible    = false
   skip_final_snapshot    = true
-  db_subnet_group_name   = aws_db_subnet_group.private.name
+  db_subnet_group_name   = aws_db_subnet_group.db.name
   vpc_security_group_ids = [aws_security_group.rds.id]
+
+  tags = {
+    Name = "sales-pipeline-db"
+  }
 }
 
 ######################
@@ -317,6 +361,10 @@ resource "aws_lambda_function" "s3_to_rds" {
       BUCKET_NAME  = aws_s3_bucket.data_bucket.bucket
     }
   }
+
+  tags = {
+    Name = "sales-pipeline-loader"
+  }
 }
 
 ######################
@@ -326,6 +374,10 @@ resource "aws_lambda_function" "s3_to_rds" {
 resource "aws_key_pair" "metabase_key" {
   key_name   = var.ec2_key_name
   public_key = file(pathexpand(var.ssh_public_key_path))
+
+  tags = {
+    Name = "sales-pipeline-metabase-key"
+  }
 }
 
 resource "aws_instance" "metabase" {
@@ -383,6 +435,11 @@ output "db_password" {
 }
 
 output "ssh_command" {
-  value       = "ssh -i ~/.ssh/metabase ubuntu@${aws_instance.metabase.public_ip}"
+  value       = "ssh -i ./metabase ubuntu@${aws_instance.metabase.public_ip}"
   description = "SSH command to connect to Metabase EC2"
+}
+
+output "rds_tunnel_command" {
+  value       = "ssh -i ./metabase -N -L 3306:${aws_db_instance.etl_database.address}:3306 ubuntu@${aws_instance.metabase.public_ip}"
+  description = "Port-forward localhost:3306 to the private RDS instance through the Metabase host"
 }

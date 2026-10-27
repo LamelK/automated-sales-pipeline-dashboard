@@ -98,6 +98,31 @@ __10.User Consumption:__
 
 ---
 
+## __Resource naming__
+
+Everything this project creates in AWS carries a `Name` tag of the form `sales-pipeline-<role>`, plus `Project = sales-pipeline` and `ManagedBy = terraform` from the provider's `default_tags`. Consequently:
+
+| Tag / name | Resource |
+|---|---|
+| `sales-pipeline-vpc` | VPC `10.0.0.0/16` |
+| `sales-pipeline-public-1/2` | Public subnets (`10.0.101.0/24`, `10.0.103.0/24`) |
+| `sales-pipeline-private-1/2` | Private subnets (`10.0.102.0/24`, `10.0.104.0/24`) |
+| `sales-pipeline-public-rt` / `-private-rt` | Route tables (IGW / S3 endpoint) |
+| `sales-pipeline-igw` | Internet gateway |
+| `sales-pipeline-s3-endpoint` | S3 gateway VPC endpoint |
+| `sales-pipeline-data-bucket` | S3 bucket (`etl-data-sales-pipeline`) |
+| `sales-pipeline-db` | RDS instance (`electronics-shop-db`) |
+| `sales-pipeline-db-subnets` | DB subnet group |
+| `sales-pipeline-lambda-sg` | Security group attached to the loader Lambda |
+| `sales-pipeline-rds-sg` | Security group guarding port 3306 |
+| `sales-pipeline-metabase-sg` | Security group for the Metabase host |
+| `sales-pipeline-loader` | Lambda function |
+| `sales-pipeline-lambda-role` | Lambda IAM role |
+| `sales-pipeline-metabase` | EC2 instance running Metabase |
+| `sales-pipeline-metabase-key` | EC2 key pair |
+
+The RDS instance **identifier** stays `electronics-shop-db` (renaming it changes the endpoint DNS and would break Metabase's saved connection), but its `Name` tag is `sales-pipeline-db`.
+
 ## __Database schema__
 
 The database is a small star schema: three dimension tables and one fact table, created once by hand in MySQL (see [Initializing RDS](#34-accessing-metabase-and-initializing-rds)).
