@@ -32,5 +32,5 @@ deployments:
     name: etl-workpool
     work_queue_name: null
   schedule:
-    cron: "0 2 * * 1"  # Every Monday at 2 AM
+    cron: "0 2 * * *"  # Every day at 2 AM
     timezone: "Africa/Johannesburg"
