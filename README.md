@@ -132,6 +132,10 @@ The RDS instance **identifier** stays `electronics-shop-db` (renaming it changes
 
 The database is a small star schema: three dimension tables and one fact table, created once by the `sales-pipeline-schema-initializer` Lambda (see [Initialising RDS](#34-accessing-metabase-and-initialising-rds)).
 
+<img src="./images/sales_erd.png" alt="Entity relationship diagram of the sales star schema" width="800"/>
+
+The diagram shows the four tables and the three foreign keys that `sales` holds into `products`, `customers` and `stores`.
+
 | Table | Key | Other columns |
 |---|---|---|
 | `products` | `product_id` (the SKU, e.g. `SKU-1014`) | `product_name`, `product_category` |
