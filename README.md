@@ -166,17 +166,17 @@ The loader never deletes. Every table is written with `INSERT ... ON DUPLICATE K
 <table>
   <tr>
     <td style="text-align: center;">
-      <img src="./images/dashboard_v1.png" alt="Image 1" width="600"/><br/>
-      <b>Figure 1:</b> Week 1
+      <img src="./images/dashboard_v1.png" alt="Sales dashboard for the first day" width="600"/><br/>
+      <b>Figure 1:</b> Day 1
     </td>
     <td style="text-align: center;">
-      <img src="./images/dashboard_v2.png" alt="Image 2" width="600"/><br/>
-      <b>Figure 2:</b> Week 2
+      <img src="./images/dashboard_v2.png" alt="Sales dashboard for the next day" width="600"/><br/>
+      <b>Figure 2:</b> Day 2
     </td>
   </tr>
 </table>
 
-The images above display the dashboard for two different weeks. The second image reflects the updated dashboard with refreshed data.
+The images above show the dashboard side by side for two different days. The second image reflects the dashboard with refreshed data.
 
 
 To view the dashboard for demo purposes, please contact me at [lamel446@gmail.com](mailto:lamel446@gmail.com) so i can create a user for.
