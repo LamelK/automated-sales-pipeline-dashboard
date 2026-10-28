@@ -180,7 +180,7 @@ The images above show the dashboard side by side for two different days. The sec
 
 
 To view the dashboard for demo purposes, please contact me at [lamel446@gmail.com](mailto:lamel446@gmail.com) so i can create a user for.
-You will then receive access to the dashboard hosted via **[Metabase](https://insightportals.fyi)**, where you can explore the dashboard or run queries.
+You will then receive access to the dashboard hosted via **[Metabase](https://lamelsmetabase.fyi)**, where you can explore the dashboard or run queries.
 
 > ⚠️ **Note**: Public access is disabled because the application is hosted on a free-tier service. Free-tier servers often have limited memory and CPU, which means multiple users accessing the dashboard at the same time could overload the server and cause it to crash. Controlled access helps prevent this and ensures a smoother experience for each user.
 
@@ -289,7 +289,7 @@ python -m pytest -q
 
 #### 3.4 Accessing Metabase and Initialising RDS
 ##### Metabase
-  - The Metabase host has **no inbound rules**: port 3000 is deliberately closed and SSH is closed too. Traffic is expected to arrive through a Cloudflare tunnel (the demo instance is served at [insightportals.fyi](https://insightportals.fyi)); everything the instance does is outbound.
+  - The Metabase host has **no inbound rules**: port 3000 is deliberately closed and SSH is closed too. Traffic is expected to arrive through a Cloudflare tunnel (the demo instance is served at [lamelsmetabase.fyi](https://lamelsmetabase.fyi)); everything the instance does is outbound.
   - `terraform apply` already installs Java 21, downloads Metabase `v0.64.1`, adds a 2 GB swap file and runs Metabase under systemd (`metabase.service`), so a healthy host needs no manual setup.
   - To reach Metabase on a fresh deployment, either:
     - **Tunnel (how the demo runs):** install `cloudflared` on the instance and point a tunnel at `http://localhost:3000`.
