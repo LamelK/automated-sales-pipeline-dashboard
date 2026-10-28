@@ -143,7 +143,7 @@ The diagram shows the four tables and the three foreign keys that `sales` holds 
 | `customers` | `customer_id` (`AUTO_INCREMENT`, assigned by MySQL) | `customer_name` (`UNIQUE`) |
 | `sales` | `transaction_id` (UUID) | `transaction_date`, `transaction_time`, `day_of_week`, `product_id`, `customer_id`, `store_id`, `price`, `quantity_sold`, `total_sale`, `currency_code`, `payment_method`, `order_status` |
 
-`sales` holds one row per product line of a transaction, and points at the three dimensions with foreign keys.
+`sales` holds one row per transaction, keyed on `transaction_id`, and points at the three dimensions with foreign keys. If a transaction ever needed to be stored as separate product lines, the primary key would have to become a composite of `transaction_id` and `product_id`.
 
 **How the sale date is set**
 
