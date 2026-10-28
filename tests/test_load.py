@@ -30,6 +30,7 @@ def transformed_data():
 
 
 def test_model_sales_data():
+    """Splits cleaned rows into the four tables, keeps the source keys and leaves raw data alone."""
     df = transformed_data()
     raw = df.copy()
 
@@ -66,6 +67,7 @@ def test_model_sales_data():
 
 
 def test_model_sales_data_does_not_mutate_input():
+    """Leaves the dataframe the caller passed in unchanged."""
     df = transformed_data()
     before = df.copy()
 
@@ -76,6 +78,7 @@ def test_model_sales_data_does_not_mutate_input():
 
 @patch("etl_pipeline.load.get_run_logger")
 def test_upload_df_to_s3(mock_get_logger):
+    """Uploads the CSV body to the given key and returns the s3:// path."""
     mock_logger = MagicMock()
     mock_get_logger.return_value = mock_logger
 
@@ -100,6 +103,7 @@ def test_upload_df_to_s3(mock_get_logger):
 
 @patch("etl_pipeline.load.get_run_logger")
 def test_upload_df_to_s3_failure(mock_get_logger):
+    """Lets the S3 error through, so a failed upload cannot be reported as success."""
     mock_logger = MagicMock()
     mock_get_logger.return_value = mock_logger
 
@@ -118,6 +122,7 @@ def test_upload_df_to_s3_failure(mock_get_logger):
 
 @patch("etl_pipeline.load.get_run_logger")
 def test_upload_df_to_s3_rejects_empty_dataframe(mock_get_logger):
+    """Refuses an empty dataset before it touches S3."""
     mock_get_logger.return_value = MagicMock()
     mock_s3 = MagicMock()
 

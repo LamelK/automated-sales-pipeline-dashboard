@@ -32,26 +32,31 @@ def invoke_with(payload, function_error=None, status_code=200):
 
 
 def test_returns_payload_when_lambda_succeeds():
+    """Returns the Lambda payload when the loader reports success."""
     payload = {"status": "success", "message": "sales=2"}
 
     assert invoke_with(payload) == payload
 
 
 def test_function_error_is_raised():
+    """Raises when AWS marks the invocation as a function error."""
     with pytest.raises(Exception, match="Lambda invocation failed"):
         invoke_with({"errorMessage": "boom"}, function_error="Unhandled")
 
 
 def test_error_message_in_body_is_raised():
+    """Raises when the Lambda body carries an errorMessage."""
     with pytest.raises(Exception, match="reported an error"):
         invoke_with({"errorMessage": "could not reach RDS"})
 
 
 def test_non_success_status_in_body_is_raised():
+    """Raises when the Lambda body reports a failure status."""
     with pytest.raises(Exception, match="reported failure"):
         invoke_with({"status": "error", "message": "0 rows loaded"})
 
 
 def test_non_200_invoke_status_is_raised():
+    """Raises when the invoke call itself comes back with a non 200 status."""
     with pytest.raises(Exception, match="HTTP 500"):
         invoke_with({"status": "success"}, status_code=500)

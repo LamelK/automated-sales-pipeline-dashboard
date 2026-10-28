@@ -15,7 +15,7 @@ def mock_logger():
         yield mock.return_value
 
 def test_extract_success(mock_logger):
-    """Comprehensive test of successful extraction"""
+    """Fetches the CSV from Mockaroo and returns it as a dataframe."""
     with patch('requests.get') as mock_get:
         # Setup mock API response
         mock_resp = Mock()
@@ -36,7 +36,7 @@ def test_extract_success(mock_logger):
         mock_logger.info.assert_any_call("✅ Data successfully retrieved from Mockaroo API.")
 
 def test_extract_failure(mock_logger):
-    """Test error handling"""
+    """Passes the HTTP error up to Prefect and logs it."""
     with patch('requests.get') as mock_get:
         mock_get.side_effect = requests.exceptions.HTTPError("API Error")
         

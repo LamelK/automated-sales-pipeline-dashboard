@@ -35,6 +35,7 @@ def test_etl_process(
     mock_lambda_submit,
     dummy_df
 ):
+    """Runs the flow end to end and tells the Lambda which files this run produced."""
     # 🔐 Mock Secret block
     mock_secret_instance = MagicMock()
     mock_secret_instance.get.return_value = {
@@ -116,6 +117,7 @@ def test_flow_raises_when_extraction_returns_no_rows(
     mock_secret_load,
     mock_boto3_client
 ):
+    """Fails the run when Mockaroo returns no rows, instead of loading an empty batch."""
     mock_secret_load.return_value.get.return_value = {
         "MOCKAROO_API_KEY": "fake_api_key",
         "AWS_ACCESS_KEY_ID": "fake_aws_key",
@@ -129,6 +131,7 @@ def test_flow_raises_when_extraction_returns_no_rows(
 
 
 def test_verify_s3_object_rejects_missing_object():
+    """Treats an object that head_object cannot find as a failed upload."""
     s3 = MagicMock()
     s3.head_object.side_effect = ClientError(
         {"Error": {"Code": "404", "Message": "Not Found"}}, "HeadObject"
@@ -139,6 +142,7 @@ def test_verify_s3_object_rejects_missing_object():
 
 
 def test_verify_s3_object_rejects_empty_object():
+    """Treats a zero byte object as a failed upload."""
     s3 = MagicMock()
     s3.head_object.return_value = {"ContentLength": 0}
 
@@ -147,5 +151,6 @@ def test_verify_s3_object_rejects_empty_object():
 
 
 def test_verify_s3_object_rejects_missing_path():
+    """Rejects an upload task that returned no S3 path at all."""
     with pytest.raises(RuntimeError, match="returned no S3 path"):
         verify_s3_object(MagicMock(), None)

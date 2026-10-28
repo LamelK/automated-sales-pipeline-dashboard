@@ -65,6 +65,7 @@ def valid_rows():
 
 
 def test_standardize_types():
+    """Strips text and converts the typed columns to date, time and float."""
     df = pd.DataFrame({
         "transaction_id": [" a1 "],
         "transaction_date": ["2026-10-24"],
@@ -86,6 +87,7 @@ def test_standardize_types():
 
 
 def test_drop_invalid_rows():
+    """Drops rows that have no transaction, product or customer key."""
     result = drop_invalid_rows(sample_data())
 
     assert len(result) == 6
@@ -95,6 +97,7 @@ def test_drop_invalid_rows():
 
 
 def test_drop_duplicate_transactions():
+    """Keeps the first row per transaction_id so a sale is loaded once."""
     result = valid_rows()
 
     assert len(result) == 5
@@ -102,6 +105,7 @@ def test_drop_duplicate_transactions():
 
 
 def test_fill_product_category():
+    """Fills a missing category from another row with the same product_id."""
     result = fill_product_category(valid_rows())
 
     assert result["product_category"].isnull().sum() == 0
@@ -110,6 +114,7 @@ def test_fill_product_category():
 
 
 def test_fill_price():
+    """Fills a missing price from another row with the same product_id."""
     result = fill_price(valid_rows())
 
     assert result["price"].isnull().sum() == 0
@@ -117,6 +122,7 @@ def test_fill_price():
 
 
 def test_fill_quantity():
+    """Fills a missing quantity with the rounded average of the column."""
     df = valid_rows()
     expected = round(df["quantity_sold"].mean())
 
@@ -127,6 +133,7 @@ def test_fill_quantity():
 
 
 def test_compute_total_sale():
+    """Calculates total_sale as price times quantity wherever it is missing."""
     df = fill_quantity(fill_price(valid_rows()))
 
     result = compute_total_sale(df)
@@ -137,6 +144,7 @@ def test_compute_total_sale():
 
 
 def test_fill_store_region():
+    """Fills a missing store_region from another row with the same store_id."""
     result = fill_store_region(valid_rows())
 
     assert result["store_region"].isnull().sum() == 0
@@ -145,6 +153,7 @@ def test_fill_store_region():
 
 @patch("etl_pipeline.transform.get_run_logger")
 def test_transform_sales_data(mock_get_logger):
+    """Runs the whole clean-up: no nulls, unique transactions, source data untouched."""
     mock_get_logger.return_value = MagicMock()
 
     df_raw = sample_data()

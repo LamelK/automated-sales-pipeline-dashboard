@@ -130,6 +130,7 @@ def run_loader(loader, monkeypatch, bodies, cursor, event=None):
 
 
 def test_upserts_every_table_and_never_deletes(loader, monkeypatch):
+    """Writes all four tables with upserts, commits once and never deletes."""
     cursor = FakeCursor()
 
     result, connection = run_loader(loader, monkeypatch, staged_csvs(), cursor)
@@ -155,6 +156,7 @@ def test_upserts_every_table_and_never_deletes(loader, monkeypatch):
 
 
 def test_sales_rows_are_complete_and_resolved(loader, monkeypatch):
+    """Sends full 13 column sales rows with the customer id already resolved."""
     cursor = FakeCursor()
 
     run_loader(loader, monkeypatch, staged_csvs(), cursor)
@@ -169,6 +171,7 @@ def test_sales_rows_are_complete_and_resolved(loader, monkeypatch):
 
 
 def test_customer_ids_survive_a_later_run(loader, monkeypatch):
+    """Keeps existing customer ids across runs and only numbers a new name."""
     first_cursor = FakeCursor()
     run_loader(
         loader,
@@ -198,6 +201,7 @@ def test_customer_ids_survive_a_later_run(loader, monkeypatch):
 
 
 def test_connection_failure_is_raised_not_masked(loader, monkeypatch):
+    """Raises a database connection failure instead of returning an error payload."""
     fake_pymysql = MagicMock()
     fake_pymysql.connect.side_effect = RuntimeError("cannot reach RDS")
     monkeypatch.setattr(loader, "pymysql", fake_pymysql)
@@ -224,6 +228,7 @@ def test_loads_the_files_named_in_the_event(loader, monkeypatch):
 
 
 def test_unknown_customer_is_rejected(loader, monkeypatch):
+    """Rejects a sale whose customer name is not in the customers table."""
     cursor = FakeCursor()
     bodies = staged_csvs(customers=("Sipho Ndlovu",))
 

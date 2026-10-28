@@ -205,7 +205,7 @@ The Prefect worker also keeps detailed logs for each step of the ETL process, wh
 Changes made to the scripts are deployed only if the CI/CD pipeline passes successfully.  
 The workflow lives in [.github/workflows/prefect-ci-cd.yml](.github/workflows/prefect-ci-cd.yml) and runs on every push and pull request to `main`.
 
-- Tests: `pytest tests/` on Python 3.9, with `PYTHONPATH` set to the repository root.
+- Tests: `pytest tests/` on Python 3.13, with `PYTHONPATH` set to the repository root.
 - Deploy only happens on a push to `main`. Once the tests pass, the job logs in to Prefect Cloud with `PREFECT_API_KEY` and runs `prefect deploy --all`, which uploads the flow code to `s3://<bucket>/flows/`.
 
 Pull requests from forks cannot read repository secrets, so the login step fails there. For those PRs the test result is what matters. GitHub secrets are set up in [Configure GitHub secrets](#44-configure-github-secrets).
@@ -233,7 +233,7 @@ cd automated-sales-pipeline-dashboard
 ```
 
 - It is recommended to use a Linux shell (WSL on Windows) for this, since the Terraform and AWS CLI steps below assume bash.
-- The Lambdas run on `python3.13`, so use Python 3.13 locally and your code will behave the same in both places. CI runs the tests on Python 3.9 (see [.github/workflows/prefect-ci-cd.yml](.github/workflows/prefect-ci-cd.yml)), so keep the pipeline code and tests working on 3.9 as well.
+- The Lambdas run on `python3.13`, so use Python 3.13 locally. CI uses the same version (see [.github/workflows/prefect-ci-cd.yml](.github/workflows/prefect-ci-cd.yml)), and `requirements.txt` pins the exact versions both use, so the tests run against the stack that ships.
 - Create and activate a virtual environment, then install the dependencies:
 
 ```bash
@@ -400,7 +400,7 @@ If there are any errors, check the logs in the UI and address them accordingly.
 ### 6. Deploying
 - Add your changes, commit them, and push to GitHub. This should trigger the CI/CD workflow (`.github/workflows/prefect-ci-cd.yml`, note the `.yml` extension).
 - The workflow runs on every push and pull request to `main`:
-  - **Both** run `pytest tests/` on Python 3.9.
+  - **Both** run `pytest tests/` on Python 3.13.
   - Only a **push** to `main` logs in to Prefect Cloud and runs `prefect deploy --all`.
   - Pull requests from forks cannot read repository secrets, so the Prefect login step fails there; use the test result as the signal for those PRs.
 - To deploy without waiting for CI, log in and run the same command from the repository root:

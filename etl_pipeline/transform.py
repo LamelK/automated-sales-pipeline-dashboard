@@ -54,7 +54,8 @@ def fill_store_region(df):
 
 def standardize_types(df):
     # Strip strings and convert specific columns to numeric/date/time
-    str_cols = df.select_dtypes(include="object").columns
+    # is_string_dtype covers both the legacy object dtype and pandas 3's str dtype
+    str_cols = [col for col in df.columns if pd.api.types.is_string_dtype(df[col])]
     df[str_cols] = df[str_cols].apply(lambda x: x.str.strip())
     df["price"] = pd.to_numeric(df["price"], errors='coerce')
     df["quantity_sold"] = pd.to_numeric(df["quantity_sold"], errors='coerce')
