@@ -116,22 +116,6 @@ The diagram shows the four tables and the three foreign keys that `sales` holds 
 | `customers` | `customer_id` (`AUTO_INCREMENT`, assigned by MySQL) | `customer_name` (`UNIQUE`) |
 | `sales` | `transaction_id` (UUID) | `transaction_date`, `transaction_time`, `day_of_week`, `product_id`, `customer_id`, `store_id`, `price`, `quantity_sold`, `total_sale`, `currency_code`, `payment_method`, `order_status` |
 
-`sales` holds one row per transaction, keyed on `transaction_id`, and points at the three dimensions with foreign keys. If a transaction ever needed to be stored as separate product lines, the primary key would have to become a composite of `transaction_id` and `product_id`.
-
-**How the sale date is set**
-
-The Mockaroo schema returns the trading day itself, which is yesterday's date, so `transaction_date` and `day_of_week` arrive already correct and are passed through untouched. The pipeline adds no date logic of its own; the source is the single place that decides which day a batch covers.
-
-**Why the keys look like this**
-
-- `product_id` and `store_id` arrive from the source as stable business keys, so they are used directly and no surrogate ids are invented in Python.
-- `customer_name` is all the source gives us for a customer, so MySQL assigns `customer_id` with `AUTO_INCREMENT`. The loader inserts names with `INSERT IGNORE` and then reads the ids back, which keeps every existing row pointing at the same person.
-- `transaction_id` is a UUID, unique per transaction, which makes the table safe to append to across runs.
-
-**Loading is incremental**
-
-The loader never deletes. Every table is written with `INSERT ... ON DUPLICATE KEY UPDATE`, so re-running a flow is idempotent, retries are safe, and earlier days stay in `sales`. That is what the daily filter in Metabase needs.
-
 ---
 
 ## Dashboard
