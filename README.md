@@ -1,4 +1,4 @@
-# __Automated-Sales-Pipeline-Dashboard__
+# Automated Sales Pipeline Dashboard
 
 ## 📘 Table of Contents
 
@@ -6,24 +6,26 @@
 - [Tech Stack](#tech-stack)  
 - [Architecture](#architecture)  
 - [How it works](#how-it-works)  
+- [Resource naming](#resource-naming)  
 - [Database schema](#database-schema)  
 - [Dashboard](#dashboard)  
+- [Project Documentation](#project-documentation)  
 - [Monitoring](#monitoring)  
 - [CI/CD](#cicd)  
 - [Environment setup](#environment-setup)  
   - [Mockaroo](#1mockaroo)  
-  - [Virtual environment](#2virtual-environmenet)  
+  - [Virtual environment](#2virtual-environment)  
   - [Cloud setup](#3-cloud-setup)  
     - [Terraform Installation](#31-terraform-installation)  
     - [Project Setup and Configuration](#32-project-setup-and-configuration)  
     - [Spin up AWS Services](#33-spin-up-aws-services)  
-    - [Accessing Metabase and Initializing RDS](#34-accessing-metabase-and-initializing-rds)  
+    - [Accessing Metabase and Initialising RDS](#34-accessing-metabase-and-initialising-rds)  
     - [S3 Bucket Information](#35-s3-bucket-information)  
   - [Prefect Setup](#4-prefect-setup)  
     - [Create API Key](#41-create-api-key)  
     - [Configure Prefect Blocks for Credentials](#42-configure-prefect-blocks-for-credentials)  
     - [Configure Prefect worker pool](#43-configure-prefect-worker-pool)  
-    - [Configure GitHub secrets](#43-configure-github-secrets)  
+    - [Configure GitHub secrets](#44-configure-github-secrets)  
   - [Scripts and yaml files](#5-scripts-and-yaml-files)  
     - [Yaml](#51-yaml)  
     - [Scripts](#52-scripts)  
@@ -32,22 +34,24 @@
 - [License](#license)
 
 
-## __Project Overview__
-This project implements an automated data pipeline that runs on a weekly schedule to extract, transform, and load (ETL) sales data. The pipeline is orchestrated using Prefect, with data flowing from a synthetic data source (Mockaroo) through S3, and finally into an RDS MySQL database. After the data is loaded, a Metabase dashboard automatically refreshes to provide up-to-date weekly sales insights for end users.
+## Project Overview
+This project implements an automated data pipeline that runs on a daily schedule to extract, transform, and load (ETL) sales data. The pipeline is orchestrated using Prefect, with data flowing from a synthetic data source (Mockaroo) through S3, and finally into an RDS MySQL database. After the data is loaded, a Metabase dashboard automatically refreshes to provide up-to-date sales insights for end users.
+
+The schedule is `0 2 * * *` in the `Africa/Johannesburg` time zone, defined on the `etl-deployment` in [prefect.yaml](prefect.yaml).
 
 The goal of this pipeline is to demonstrate an end-to-end solution for automated data ingestion, transformation, and business intelligence reporting all fully deployed on AWS and Prefect Cloud, using scalable, modular components.
 
 <img src="./images/flow-diagram.png" alt="Architecture Diagram" width="700"/>
 
-## __Tech Stack__
+## Tech Stack
 
-- **Prefect Cloud** – Workflow orchestration
-- **AWS S3** – Storage for raw and transformed data
-- **AWS Lambda** – Serverless compute to load data into RDS
-- **Amazon RDS (MySQL)** – Relational database for structured storage
-- **Metabase** – Business Intelligence and dashboarding
-- **Mockaroo** – Synthetic data source
-- **Terraform** – Infrastructure as Code 
+- **Prefect Cloud**: workflow orchestration
+- **AWS S3**: storage for raw and transformed data
+- **AWS Lambda**: serverless compute to load data into RDS
+- **Amazon RDS (MySQL)**: relational database for structured storage
+- **Metabase**: business intelligence and dashboarding
+- **Mockaroo**: synthetic data source
+- **Terraform**: infrastructure as code
 
 ---
 
@@ -55,18 +59,18 @@ The goal of this pipeline is to demonstrate an end-to-end solution for automated
 
 <img src="./images/architecture_diagram.png" alt="Architecture Diagram" width="700"/>
 
-This diagram shows the flow of data from → Mockaroo → S3 → Lambda → RDS → Metabase, At the heart of this system is Prefect, a modern workflow orchestration framework that automates and schedules the entire ETL process. Using Prefect Cloud, the pipeline runs seamlessly on a weekly basis without manual intervention enabling scalable, reliable, and observable data workflows across cloud services
+This diagram shows the flow of data: Mockaroo → S3 → Lambda → RDS → Metabase. At the heart of the system is Prefect, which automates and schedules the whole ETL process. With Prefect Cloud the pipeline runs every day without any manual work, and you can follow each step in the UI.
 
 ---
 
-## __How it works__
+## How it works
 <img src="./images/sequence_diagram.png" alt="Architecture Diagram" width="1000"/>
 
 The data flows through the pipeline in a series of automated steps:
 
 __1.Scheduled Trigger:__
 
-- The entire ETL pipeline is initiated by a scheduled trigger (e.g., a weekly cron job at 2 AM) configured within Prefect Cloud.
+- The entire ETL pipeline is started by the schedule on the `etl-deployment` in Prefect Cloud. Right now that is `0 2 * * *`, which means every day at 02:00 in the `Africa/Johannesburg` time zone.
 
 __2.ETL Pipeline Start (Prefect):__ 
 - Prefect Cloud signals a Prefect Worker to start the ETL execution. A prefect worker is a background process that runs and executes your Prefect flows and tasks.
@@ -75,11 +79,10 @@ __3.Data Extraction (Python via Prefect):__
 - The Prefect Worker executes the Python ETL script. This script connects to the Mockaroo API to fetch the "Raw Data" (CSV).
 
 __4.Data Transformation (Python via Prefect):__ 
-- The Python script then performs all necessary data cleaning and transformation operations on the raw data. This results in "Transformed Data," typically split into multiple CSV files for organizational purposes.
-The Python script then performs all necessary data cleaning and transformation operations on the raw data. This process includes data modeling, restructuring the raw data and outputting it into multiple CSV files. Each of these CSVs is designed to represent a specific, structured dataset, typically corresponding to a distinct table in the target relational database.
+- The Python script performs all necessary data cleaning and transformation operations on the raw data. This includes data modeling, restructuring the raw data and outputting it into multiple CSV files. Each of these CSVs is designed to represent a specific, structured dataset, typically corresponding to a distinct table in the target relational database.
 
 __5.Data Staging (Python to S3):__ 
-- The Python script loads the "Transformed Data" (multiple CSVs) into the designated S3 Bucket.
+- The Python script loads the "Transformed Data" (multiple CSVs) into the designated S3 Bucket. Every run writes to its own prefix (`transformed_data/<run-timestamp>/...`, plus the untouched extract under `raw_data/<run-timestamp>/`), so runs never overwrite each other.
 
 __6.Load Orchestration (Prefect to Lambda):__ 
 - Once the data is uploaded to S3, Prefect invokes an AWS Lambda Function. This Lambda function is specifically designed to handle the loading of data from S3 into the database.
@@ -98,7 +101,7 @@ __10.User Consumption:__
 
 ---
 
-## __Resource naming__
+## Resource naming
 
 Everything this project creates in AWS carries a `Name` tag of the form `sales-pipeline-<role>`, plus `Project = sales-pipeline` and `ManagedBy = terraform` from the provider's `default_tags`. Consequently:
 
@@ -125,36 +128,36 @@ Everything this project creates in AWS carries a `Name` tag of the form `sales-p
 
 The RDS instance **identifier** stays `electronics-shop-db` (renaming it changes the endpoint DNS and would break Metabase's saved connection), but its `Name` tag is `sales-pipeline-db`.
 
-## __Database schema__
+## Database schema
 
-The database is a small star schema: three dimension tables and one fact table, created once by the `sales-pipeline-schema-initializer` Lambda (see [Initializing RDS](#34-accessing-metabase-and-initializing-rds)).
+The database is a small star schema: three dimension tables and one fact table, created once by the `sales-pipeline-schema-initializer` Lambda (see [Initialising RDS](#34-accessing-metabase-and-initialising-rds)).
 
 | Table | Key | Other columns |
 |---|---|---|
-| `products` | `product_id` — the SKU, e.g. `SKU-1014` | `product_name`, `product_category` |
+| `products` | `product_id` (the SKU, e.g. `SKU-1014`) | `product_name`, `product_category` |
 | `stores` | `store_id`, e.g. `STR-DBN-01` | `store_location`, `store_region` |
-| `customers` | `customer_id` — `AUTO_INCREMENT`, assigned by MySQL | `customer_name` (`UNIQUE`) |
-| `sales` | `transaction_id` — UUID | `transaction_date`, `transaction_time`, `day_of_week`, `product_id`, `customer_id`, `store_id`, `price`, `quantity_sold`, `total_sale`, `currency_code`, `payment_method`, `order_status` |
+| `customers` | `customer_id` (`AUTO_INCREMENT`, assigned by MySQL) | `customer_name` (`UNIQUE`) |
+| `sales` | `transaction_id` (UUID) | `transaction_date`, `transaction_time`, `day_of_week`, `product_id`, `customer_id`, `store_id`, `price`, `quantity_sold`, `total_sale`, `currency_code`, `payment_method`, `order_status` |
 
 `sales` holds one row per product line of a transaction, and points at the three dimensions with foreign keys.
 
 **How the sale date is set**
 
-The Mockaroo schema returns the trading day itself — yesterday's date — so `transaction_date` and `day_of_week` arrive already correct and are passed through untouched. The pipeline adds no date logic of its own; the source is the single place that decides which day a batch covers.
+The Mockaroo schema returns the trading day itself, which is yesterday's date, so `transaction_date` and `day_of_week` arrive already correct and are passed through untouched. The pipeline adds no date logic of its own; the source is the single place that decides which day a batch covers.
 
 **Why the keys look like this**
 
-- `product_id` and `store_id` arrive from the source as stable business keys, so they are used directly — no surrogate ids are invented in Python.
+- `product_id` and `store_id` arrive from the source as stable business keys, so they are used directly and no surrogate ids are invented in Python.
 - `customer_name` is all the source gives us for a customer, so MySQL assigns `customer_id` with `AUTO_INCREMENT`. The loader inserts names with `INSERT IGNORE` and then reads the ids back, which keeps every existing row pointing at the same person.
 - `transaction_id` is a UUID, unique per transaction, which makes the table safe to append to across runs.
 
 **Loading is incremental**
 
-The loader never deletes. Every table is written with `INSERT ... ON DUPLICATE KEY UPDATE`, so re-running a flow is idempotent, retries are safe, and earlier days stay in `sales` — which is what the daily filter in Metabase needs.
+The loader never deletes. Every table is written with `INSERT ... ON DUPLICATE KEY UPDATE`, so re-running a flow is idempotent, retries are safe, and earlier days stay in `sales`. That is what the daily filter in Metabase needs.
 
 ---
 
-## __Dashboard__
+## Dashboard
 
 <table>
   <tr>
@@ -178,27 +181,38 @@ You will then receive access to the dashboard hosted via **[Metabase](https://in
 > ⚠️ **Note**: Public access is disabled because the application is hosted on a free-tier service. Free-tier servers often have limited memory and CPU, which means multiple users accessing the dashboard at the same time could overload the server and cause it to crash. Controlled access helps prevent this and ensures a smoother experience for each user.
 
 ---
-## __Project Documentation__
-For detailed documentation of the project, please refer to [📄project documentation](docs/)
+## Project Documentation
 
-## __Monitoring__
-Since the front end runs on AWS services, an AWS CloudWatch dashboard is used to monitor the health and performance of key infrastructure components including EC2, RDS, and S3. The dashboard tracks metrics such as available storage in RDS and S3 buckets, EC2 read/write bytes, and CPU utilization, providing real-time visibility into system resource usage, A comprehensive overview of these metrics is available in the documentation, which includes detailed views of EC2, RDS, and S3 performance indicators.
+> **Note:** The PDF in [docs/](docs/) ([project documentation](docs/Project_Documentation.pdf)) describes the **first version** of this project, which ran the ETL as a **weekly** batch. The pipeline has since been updated to run **daily** batches instead, using the cron schedule in [prefect.yaml](prefect.yaml). So read the PDF as background on how the project was originally built, and not as a description of how it runs today. If the two ever disagree, this README is the one to trust.
 
-Since the prefect worker is running on Prefect's hosted infrastructure ("Prefect hardware"), direct monitoring of the underlying machine is not possible. However, the Prefect UI clearly indicates the worker status, if it shows as "Ready", it means the worker is actively polling and available to execute flows. If the status is not ready, scheduled flows will not run.
+If you are interested in how that old weekly version runs, check out the [`dev` branch](https://github.com/LamelK/automated-sales-pipeline-dashboard/tree/dev), which still has it:
 
-The prefect worker provides detailed logs for each step of the ETL process, making it easy to trace the execution path. Additionally, notifications (such as email alerts) are sent automatically on flow success or failure, ensuring visibility into pipeline outcomes.
+```bash
+git fetch origin
+git switch dev
+```
+
+## Monitoring
+Since the front end runs on AWS services, an AWS CloudWatch dashboard is used to monitor the health and performance of the main infrastructure: EC2, RDS and S3. It tracks things like available storage on RDS and in the S3 buckets, EC2 read/write bytes and CPU usage, so you get real-time visibility of how the system is using its resources. A more detailed overview of these metrics is in the documentation, which includes views of the EC2, RDS and S3 indicators.
+
+The Prefect worker runs on Prefect's hosted infrastructure ("Prefect hardware"), so the machine behind it cannot be monitored directly. The Prefect UI does show the worker status, though: if it says "Ready", the worker is polling and available to run flows. If it is not ready, scheduled flows will not run.
+
+The Prefect worker also keeps detailed logs for each step of the ETL process, which makes it easy to trace where a run went wrong. Notifications (such as email alerts) are sent automatically when a flow succeeds or fails, so you always know how a run ended.
 
 ---
 
 ## CI/CD
 Changes made to the scripts are deployed only if the CI/CD pipeline passes successfully.  
-This ensures that no broken code with errors is pushed to production.  
-The CI/CD pipeline runs configuration checks, test scripts, and other validations.  
-Only after passing all these checks is the flow deployed.
+The workflow lives in [.github/workflows/prefect-ci-cd.yml](.github/workflows/prefect-ci-cd.yml) and runs on every push and pull request to `main`.
+
+- Tests: `pytest tests/` on Python 3.9, with `PYTHONPATH` set to the repository root.
+- Deploy only happens on a push to `main`. Once the tests pass, the job logs in to Prefect Cloud with `PREFECT_API_KEY` and runs `prefect deploy --all`, which uploads the flow code to `s3://<bucket>/flows/`.
+
+Pull requests from forks cannot read repository secrets, so the login step fails there. For those PRs the test result is what matters. GitHub secrets are set up in [Configure GitHub secrets](#44-configure-github-secrets).
 
 ---
 
-## __Environment setup__
+## Environment setup
 
 > **Note:** The AWS services used in this project are mostly within the Free Tier. However, **insignificant charges may still occur** depending on usage.  
 > It is recommended to use this repository only if you have some experience with **AWS** and **Terraform**.  
@@ -211,17 +225,27 @@ After signing up, open a new tab and paste this link: [Mockaroo Dataset](https:/
 
 Once cloned, navigate to the profile icon to find your API key. Make sure to store it securely.
 
-### 2.Virtual environmenet
-```
+### 2.Virtual environment
+
+```bash
 git clone https://github.com/LamelK/automated-sales-pipeline-dashboard.git
+cd automated-sales-pipeline-dashboard
 ```
 
-- It is recommended to use a Linux terminal (e.g., WSL). 
-- create a Python 3.13 environment using either venv or conda(need to install first). After creating the environment, activate it and install the required packages. The Lambdas run on `python3.13`.
+- It is recommended to use a Linux shell (WSL on Windows) for this, since the Terraform and AWS CLI steps below assume bash.
+- The Lambdas run on `python3.13`, so use Python 3.13 locally and your code will behave the same in both places. CI runs the tests on Python 3.9 (see [.github/workflows/prefect-ci-cd.yml](.github/workflows/prefect-ci-cd.yml)), so keep the pipeline code and tests working on 3.9 as well.
+- Create and activate a virtual environment, then install the dependencies:
 
-Change the directory to the root folder of the repository.
-```
+```bash
+python3.13 -m venv .venv
+source .venv/bin/activate      # Windows PowerShell: .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+```
+
+- Run the test suite to confirm the environment works:
+
+```bash
+python -m pytest -q
 ```
 
 ### 3. Cloud setup
@@ -235,12 +259,15 @@ pip install -r requirements.txt
     ```bash
     ssh-keygen -t rsa -b 4096 -f ./metabase
     ```
-- After generating the keys, you can open `variables.tf` or `main.tf` to customize values such as the S3 bucket name, RDS database name, username, region, etc., according to your preferences.
+- After generating the keys, you can open `variables.tf` or `main.tf` to customise values such as the S3 bucket name, RDS database name, username, region, etc., according to your preferences. The defaults are `aws_region = "eu-north-1"`, `bucket_prefix = "etl-data-sales-pipeline"` (must be globally unique), `db_name = "electronics_shop"` and `db_username = "admin"`. If you change the region, set `AWS_REGION` in the Prefect `credentials` block to the same value (see [Prefect Setup](#4-prefect-setup)).
 - The EC2 instance type is set by `ec2_instance_type` in `variables.tf`, and defaults to `t3.small` (2 vCPU, 2 GiB RAM). Earlier versions used `t3.micro`, whose 1 GiB of RAM caused Metabase to slow down or crash under load. The `user_data` script still adds a 2 GiB swap file as a safety margin.
 
-        -   ⚠️ **Note:** Any instance besides `t2.micro` and `t3.micro` are not included in the AWS Free Tier, so `t3.small` incurs charges.
+- ⚠️ **Note:** Instance types other than `t2.micro` and `t3.micro` are not included in the AWS Free Tier, so `t3.small` incurs charges.
 
 #### 3.3. Spin up AWS Services
+
+> ⚠️ **Terraform state holds secrets.** `terraform/terraform.tfstate` and `terraform/terraform.tfstate.backup` store the generated RDS password, and the `metabase` / `metabase.pub` SSH keys sit next to them. All of these are already in `.gitignore`. Never commit them, and never paste their contents into an issue or a chat. Read the password back with `terraform output -raw db_password` instead of opening the state file.
+
 -  Ensure that you have your AWS credentials configured in your system.
 -  in the same folder as the terraform files,type `terraform plan` in the terminal. This will show your spin-up plan and any other errors that might have been improperly configured.
 - The files in `terraform/` ending in `.zip` are the Lambda packages Terraform uploads (`lambda_deployment_package1.zip` → loader, `lambda_schema_initializer1.zip` → schema initializer). Each must contain its handler, the `pymysql` dependency and the RDS CA bundle `global-bundle.pem`. Rebuild them after any handler change, otherwise `terraform apply` deploys the old code:
@@ -252,42 +279,53 @@ pip install -r requirements.txt
 -  If not successful, see which services failed and fix them.
 -  If successful, it will show you the output with some of your credentials. Store them safely. The DB password will not be displayed. To get it, input:
     ```bash
-    terraform output db_password
+    terraform output -raw db_password
     ```
     Save this password safely.
 
-#### 3.4 Accessing Metabase and Initializing RDS
+#### 3.4 Accessing Metabase and Initialising RDS
 ##### Metabase
-  - Navigate to the AWS Console -> EC2 -> select your server and copy the public IP.
-  - Paste this into a new browser tab: `https://<public-ip>:3000`. This should open the Metabase application.
-  - If the page can't be reached, it means Metabase didn't install successfully during spin-up. You will have to SSH into the instance, using the key you generated previously
+  - The Metabase host has **no inbound rules**: port 3000 is deliberately closed and SSH is closed too. Traffic is expected to arrive through a Cloudflare tunnel (the demo instance is served at [insightportals.fyi](https://insightportals.fyi)); everything the instance does is outbound.
+  - `terraform apply` already installs Java 21, downloads Metabase `v0.64.1`, adds a 2 GB swap file and runs Metabase under systemd (`metabase.service`), so a healthy host needs no manual setup.
+  - To reach Metabase on a fresh deployment, either:
+    - **Tunnel (how the demo runs):** install `cloudflared` on the instance and point a tunnel at `http://localhost:3000`.
+    - **Temporary direct access:** add an inbound TCP 3000 rule (and TCP 22 if you need a shell) to the `sales-pipeline-metabase-sg` security group in the AWS console, then browse to `http://<metabase_public_ip>:3000`. Remove the rules afterwards.
+  - `terraform output -raw metabase_public_ip` prints the Elastic IP. If Metabase is not serving, check `/var/log/metabase.log` and `systemctl status metabase` over SSH:
 
       ```bash
-      ssh -i "automated-sales-pipeline-dashboard/terraform/metabase" ubuntu@<public-ip>
+      terraform output -raw ssh_command
+      # ssh -i ./metabase ubuntu@<metabase-public-ip>
       ```
-      Once connected, install Java 21 first, then Metabase, and finally start the Metabase service manually.
-##### Initializing RDS
+
+      If the page still can't be reached, Metabase didn't install during spin-up; install Java 21 and Metabase on the instance and start the service manually.
+
+##### Initialising RDS
   - Create the schema once by invoking the `sales-pipeline-schema-initializer` Lambda (the DDL lives in `lambda/lambda_schema_initializer.py` and is idempotent):
 
       ```bash
       aws lambda invoke --function-name sales-pipeline-schema-initializer --payload '{}' out.json && cat out.json
       ```
 
-      It must run before the first flow, and the four tables it creates are described in [Database schema](#database-schema).
-  - RDS runs **MySQL 8.4** on `db.t3.micro` inside the private subnets (`publicly_accessible = false`). Only the loader Lambda, the schema-initializer Lambda and Metabase may connect — by security group, not by IP. MySQL 8.4 removed `mysql_native_password`, so both Lambdas connect over TLS using the bundled `global-bundle.pem` CA.
-  - To use a client from your machine, tunnel through the Metabase instance:
+      It must run before the first flow, and the four tables it creates are described in [Database schema](#database-schema). Running it again is safe because the DDL is idempotent, so it is also fine if the schema was created by hand with the same statements.
+  - RDS runs **MySQL 8.4** on `db.t3.micro` inside the private subnets (`publicly_accessible = false`). Only the loader Lambda, the schema-initializer Lambda and Metabase may connect, and access is controlled by security group rather than by IP address. MySQL 8.4 removed `mysql_native_password`, so both Lambdas connect over TLS using the bundled `global-bundle.pem` CA.
+  - To use a client from your machine, tunnel through the Metabase instance (this needs TCP 22 open on `sales-pipeline-metabase-sg`):
 
       ```bash
-      ssh -i ./metabase -N -L 3306:electronics-shop-db.c3gmowagaqoc.eu-north-1.rds.amazonaws.com:3306 ubuntu@<metabase-public-ip>
+      terraform output -raw rds_tunnel_command
+      # ssh -i ./metabase -N -L 3306:<rds-endpoint>:3306 ubuntu@<metabase-public-ip>
       ```
 
       Then connect the client to `127.0.0.1:3306` with the database name, username and password from the Terraform output.
   - Metabase will also prompt you to enter the **database name**, **username**, **password**, and **host**.  
-  Use the values you received from the Terraform output, this step links Metabase to the RDS instance.
+  Use the values you got from the Terraform output. This step links Metabase to the RDS instance.
 
 
 #### 3.5. S3 Bucket Information
-- Go to S3 in the AWS Console and make note of the S3 bucket name. This bucket will be used by your data pipeline.
+- Go to S3 in the AWS Console and make note of the S3 bucket name (`terraform output -raw s3_bucket_name`). This bucket will be used by your data pipeline.
+- The bucket holds three kinds of prefixes:
+  - `raw_data/<run-timestamp>/raw_sales_data.csv`: the untouched Mockaroo extract.
+  - `transformed_data/<run-timestamp>/{customers,products,stores,sales}.csv`: the per-table files the Lambda loads.
+  - `flows/`: the packaged flow code uploaded by `prefect deploy` and pulled by the worker at run time.
 
 ### 4. Prefect Setup 
 ##### 4.1 Create API Key
@@ -311,9 +349,8 @@ pip install -r requirements.txt
       "AWS_SECRET_ACCESS_KEY": "your_aws_secret_access_key"
     }
     ```
-    * You will input all your details you just created 
-- Create another block but this time choose the **AWS Credentials Block**
-- Go back to the **Blocks** page.
+- `AWS_REGION` is optional: add it if your stack is not in `eu-north-1`, the region the flow falls back to (matching `var.aws_region` in `terraform/variables.tf`).
+- Create another block, this time of type **AWS Credentials**. Name it **`aws-credentials`**. [prefect.yaml](prefect.yaml) references `prefect.blocks.aws-credentials.aws-credentials` for its S3 `push` / `pull` steps, so a different name breaks deployment packaging.
 - Input your AWS `ACCESS_KEY_ID` and `SECRET_ACCESS_KEY` into the respective fields provided within this block.
 
 ##### 4.3. Configure Prefect worker pool
@@ -321,7 +358,7 @@ pip install -r requirements.txt
   The Hobby tier only supports the **Managed** worker pool type, so select that option.  
   Name the worker pool **etl-workpool**, leave the other fields as default, and click **Create**.
 
-##### 4.3. Configure GitHub secrets
+##### 4.4. Configure GitHub secrets
 - On your forked repo, navigate to **Settings** → **Secrets and variables** → **Actions**.
 - Click **New repository secret** and add the following:
   - `PREFECT_API_KEY`
@@ -330,15 +367,16 @@ pip install -r requirements.txt
 
 ### 5. Scripts and yaml files
 #### 5.1 Yaml
-- In the workflow YAML file **prefect-ci-cd.yaml**, update the Prefect login command to match your account.  
+- In the workflow YAML file **prefect-ci-cd.yml** (under `.github/workflows/`), update the Prefect login command to match your account.  
   You can find your workspace name in the Prefect Cloud UI under **Settings → Workspaces**.  
   Also, ensure your GitHub secrets are configured as described above.
 
 - In the **prefect.yaml** file, update the following:
-  - Replace the placeholder S3 bucket name with **your actual S3 bucket name**.
-  - Replace the `AWS_ROLE_ARN` value with the **IAM role ARN assigned to your Lambda function**.
+  - Set the `bucket` in both the `push` (`push_to_s3`) and `pull` (`pull_from_s3`) steps to **your actual S3 bucket name**.
+  - Check that `deployments[0].work_pool.name` matches the pool you created (`etl-workpool` by default).
+  - Adjust `schedule.cron` (`0 2 * * *`) and `schedule.timezone` (`Africa/Johannesburg`) if you want a different cadence.
 
-  These changes are required to allow the flow to access your S3 bucket and invoke the Lambda function securely.
+  There is no `AWS_ROLE_ARN` placeholder to fill in: deployment packaging authenticates through the `aws-credentials` block, and the flow itself authenticates with the keys in the `credentials` Secret block.
 
 
 #### 5.2 Scripts
@@ -346,18 +384,31 @@ pip install -r requirements.txt
   ```python
   lambda_function_name = "sales-pipeline-loader"
   ```
-- The region used to invoke the Lambda comes from the Prefect secret block, not from the code. Add an `AWS_REGION` key to the `credentials` block, or leave it out to default to `us-west-1` (the default in `terraform/variables.tf`).
+- The region used to invoke the Lambda comes from the Prefect secret block, not from the code. Add an `AWS_REGION` key to the `credentials` block, or leave it out to default to `eu-north-1` (the default of `var.aws_region` in `terraform/variables.tf`).
   Keeping it aligned with `var.aws_region` is what makes the invocation resolve the function.
 
-To test the flow locally, run the `run_pipeline.py` script.  
-Then, go to the Prefect UI to observe the flow execution.  
+To test the flow locally, log in to Prefect Cloud first (the flow loads its credentials from your workspace) and then run the pipeline script:
+
+```bash
+prefect cloud login --key <your-prefect-api-key> --workspace "<workspace-handle>"
+python etl_pipeline/run_pipeline.py
+```
+
+This is a real run. It calls Mockaroo, uploads to S3 and invokes the Lambda. Then, go to the Prefect UI to observe the flow execution.  
 If there are any errors, check the logs in the UI and address them accordingly.
 
 ### 6. Deploying
-- Add your changes, commit them, and push to GitHub — this should trigger the CI/CD workflow.
-- The CI/CD will pass when:
-  - All test scripts succeed.
-  - All required credentials and configurations are correctly set
+- Add your changes, commit them, and push to GitHub. This should trigger the CI/CD workflow (`.github/workflows/prefect-ci-cd.yml`, note the `.yml` extension).
+- The workflow runs on every push and pull request to `main`:
+  - **Both** run `pytest tests/` on Python 3.9.
+  - Only a **push** to `main` logs in to Prefect Cloud and runs `prefect deploy --all`.
+  - Pull requests from forks cannot read repository secrets, so the Prefect login step fails there; use the test result as the signal for those PRs.
+- To deploy without waiting for CI, log in and run the same command from the repository root:
+
+  ```bash
+  prefect cloud login --key <your-prefect-api-key> --workspace "<workspace-handle>"
+  prefect deploy --all
+  ```
 - Once the workflow runs successfully, go to the Prefect UI → **Deployments**, and you should see `etl-deployment` with a status of **Ready**.
   You can now execute this deployment by select options `quick-run`, which will run the entire pipeline. You can monitor the flow execution and logs directly from the UI.
 - Note: GitHub may queue the workflow if the repository is forked, as forked repos are given lower priority.
@@ -373,8 +424,8 @@ If there are any errors, check the logs in the UI and address them accordingly.
 - Once the workflow runs successfully, you should have data loaded into the RDS database and linked to Metabase.  
   You can create a few charts in Metabase and save them.  
   After that, re-run the `etl-deployment` workflow from the Prefect UI.  
-  When the flow completes, go back to Metabase — you’ll notice that the charts reflect the updated data.
-- You can also set a **cron schedule** for your `etl-deployment` directly from the Prefect UI to automate the pipeline.
+  When the flow completes, go back to Metabase and you will notice that the charts reflect the updated data.
+- The deployment already ships with the daily cron schedule from `prefect.yaml`. To change it, edit the schedule there (and redeploy), or override it in the Prefect UI under **Deployments → `etl-deployment` → Schedule**.
 
 ---
 
