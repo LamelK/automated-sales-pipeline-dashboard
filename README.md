@@ -88,7 +88,7 @@ __6.Load Orchestration (Prefect to Lambda):__
 - Once the data is uploaded to S3, Prefect invokes an AWS Lambda Function. This Lambda function is specifically designed to handle the loading of data from S3 into the database.
 
 __7.Data Loading (Lambda to RDS MySQL):__ 
-- The Lambda Function fetches the transformed CSV files from the S3 Bucket and upserts them into the appropriate tables within the RDS MySQL Database. No id mapping is needed: the files already carry the SKUs, store codes and transaction UUIDs that the tables use as keys.
+- The Lambda Function fetches the transformed CSV files from the S3 Bucket and upserts them into the appropriate tables within the RDS MySQL Database. 
 
 __8.Job Completion & Data Availability:__ 
 - Upon successful loading, the Lambda function signals back to Prefect, indicating the completion of the loading phase. At this point, the data is "Data Now Available" in the database.
@@ -100,33 +100,6 @@ __10.User Consumption:__
 - End Users interact with Metabase to request reports or view dashboards, allowing them to query the newly available data and gain insights.
 
 ---
-
-## Resource naming
-
-Everything this project creates in AWS carries a `Name` tag of the form `sales-pipeline-<role>`, plus `Project = sales-pipeline` and `ManagedBy = terraform` from the provider's `default_tags`. Consequently:
-
-| Tag / name | Resource |
-|---|---|
-| `sales-pipeline-vpc` | VPC `10.0.0.0/16` |
-| `sales-pipeline-public-1/2` | Public subnets (`10.0.101.0/24`, `10.0.103.0/24`) |
-| `sales-pipeline-private-1/2` | Private subnets (`10.0.102.0/24`, `10.0.104.0/24`) |
-| `sales-pipeline-public-rt` / `-private-rt` | Route tables (IGW / S3 endpoint) |
-| `sales-pipeline-igw` | Internet gateway |
-| `sales-pipeline-s3-endpoint` | S3 gateway VPC endpoint |
-| `sales-pipeline-data-bucket` | S3 bucket (`etl-data-sales-pipeline`) |
-| `sales-pipeline-db` | RDS instance (`electronics-shop-db`) |
-| `sales-pipeline-db-subnets` | DB subnet group |
-| `sales-pipeline-lambda-sg` | Security group attached to the loader Lambda |
-| `sales-pipeline-rds-sg` | Security group guarding port 3306 |
-| `sales-pipeline-metabase-sg` | Security group for the Metabase host |
-| `sales-pipeline-loader` | Lambda function |
-| `sales-pipeline-lambda-role` | Lambda IAM role |
-| `sales-pipeline-metabase` | EC2 instance running Metabase |
-| `sales-pipeline-metabase-key` | EC2 key pair |
-| `sales-pipeline-schema-initializer` | Lambda that creates the database schema |
-| `sales-pipeline-schema-init-sg` | Security group for the schema-initializer Lambda |
-
-The RDS instance **identifier** stays `electronics-shop-db` (renaming it changes the endpoint DNS and would break Metabase's saved connection), but its `Name` tag is `sales-pipeline-db`.
 
 ## Database schema
 
